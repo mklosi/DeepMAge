@@ -3,8 +3,3 @@
 .idea/
 /*.iml
 __pycache__
-MNIST/raw
-
-# abnormal_security
-@test_30730_tmpæ
-rules_db.sqlite
