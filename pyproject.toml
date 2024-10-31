@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "DeepMAge"
+version = "0.1.0"
+description = ""
+authors = ["Martin Klosi <roise3000@gmail.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "~3.10"
+pytest = "*"
+hyperopt = "*"
+requests = "*"
+pandas = "^2.2.2"
+pyarrow = "^17.0.0"
+scikit-learn = "*"
+torch = "*"
+torchmetrics = "*"
+torchvision = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
