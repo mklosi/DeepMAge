@@ -40,57 +40,57 @@ def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
     three_digits = gse_id[:-3]
     url = base_url.replace(gse_id_three_digits_pattern, three_digits).replace(gse_id_pattern, gse_id)
 
-    dt_start = datetime.now()
+    # dt_start = datetime.now()
     response = get_api_response(request_type="GET", url=url)
-    print(f"response runtime: {datetime.now() - dt_start}")
+    # print(f"response runtime: {datetime.now() - dt_start}")
 
     with gzip.open(io.BytesIO(response.content), 'rt') as file:
 
-        dt_start = datetime.now()
-        lines = file.readlines()  # This will give you a list of strings, one per line
-        print(f"readlines runtime: {datetime.now() - dt_start}")
-
-        dt_start = datetime.now()
-        matrix_table_lines = extract_matrix_table(lines)
-        print(f"extract_matrix_table runtime: {datetime.now() - dt_start}")
-
-        dt_start = datetime.now()
-        data = [line.replace('"', '').split('\t') for line in matrix_table_lines]
-        # data = [[element.strip() for element in line.replace('"', '').split('\t')] for line in matrix_table_lines]
-        print(f"data runtime: {datetime.now() - dt_start}")
-
-        columns = data[0]
-        data = data[1:]
-
-        dt_start = datetime.now()
-        cond_ = set(cpg_sites_df.index.tolist())
-        data = [ls_ for ls_ in data if ls_[0] in cond_]
-        print(f"filter runtime: {datetime.now() - dt_start}")
-
-        dt_start = datetime.now()
-        curr_df = pd.DataFrame(data, columns=columns)
-        print(f"pd.DataFrame runtime: {datetime.now() - dt_start}")
-
-        dt_start = datetime.now()
-        curr_df = curr_df.rename(columns={'ID_REF': cpg_site_id_str})
-        print(f"rename_col runtime: {datetime.now() - dt_start}")
-
         # dt_start = datetime.now()
-        # curr_df = curr_df[curr_df[cpg_site_id_str].isin(cpg_sites_df.index)]
-        # print(f"filter2 runtime: {datetime.now() - dt_start}")
+        lines = file.readlines()  # This will give you a list of strings, one per line
+        # print(f"readlines runtime: {datetime.now() - dt_start}")
 
-        curr_df.columns = curr_df.columns.str.strip()
+    # dt_start = datetime.now()
+    matrix_table_lines = extract_matrix_table(lines)
+    # print(f"extract_matrix_table runtime: {datetime.now() - dt_start}")
 
-        curr_df = curr_df.set_index(cpg_site_id_str).sort_index()
+    # dt_start = datetime.now()
+    data = [line.replace('"', '').split('\t') for line in matrix_table_lines]
+    # data = [[element.strip() for element in line.replace('"', '').split('\t')] for line in matrix_table_lines]
+    # print(f"data runtime: {datetime.now() - dt_start}")
 
-        missing_sites = cpg_sites_df.index.difference(curr_df.index)
-        if not missing_sites.empty:
-            print(
-                f"The following CpG sites from cpg_sites_df are missing in curr_df '{missing_sites.tolist()}'. "
-                f"Appending NaN values for each sample."
-            )
-            curr_df = curr_df.reindex(cpg_sites_df.index)
-            curr_df.sort_index()
+    columns = data[0]
+    data = data[1:]
+
+    # dt_start = datetime.now()
+    cond_ = set(cpg_sites_df.index.tolist())
+    data = [ls_ for ls_ in data if ls_[0] in cond_]
+    # print(f"filter runtime: {datetime.now() - dt_start}")
+
+    # dt_start = datetime.now()
+    curr_df = pd.DataFrame(data, columns=columns)
+    # print(f"pd.DataFrame runtime: {datetime.now() - dt_start}")
+
+    # dt_start = datetime.now()
+    curr_df = curr_df.rename(columns={'ID_REF': cpg_site_id_str})
+    # print(f"rename_col runtime: {datetime.now() - dt_start}")
+
+    # dt_start = datetime.now()
+    # curr_df = curr_df[curr_df[cpg_site_id_str].isin(cpg_sites_df.index)]
+    # print(f"filter2 runtime: {datetime.now() - dt_start}")
+
+    curr_df.columns = curr_df.columns.str.strip()
+
+    curr_df = curr_df.set_index(cpg_site_id_str).sort_index()
+
+    missing_sites = cpg_sites_df.index.difference(curr_df.index)
+    if not missing_sites.empty:
+        print(
+            f"The following CpG sites from cpg_sites_df are missing in curr_df '{missing_sites.tolist()}'. "
+            f"Appending NaN values for each sample."
+        )
+        curr_df = curr_df.reindex(cpg_sites_df.index)
+        curr_df.sort_index()
 
     # curr_df = curr_df.astype(float)
     curr_df = curr_df.apply(pd.to_numeric, errors='coerce')
@@ -148,9 +148,10 @@ def main(override):
         seen_gse_ids = []
 
     unseen_gse_ids = sorted(set(gse_ids) - set(seen_gse_ids))
-    unseen_gse_ids = [
-        "GSE106648",
-    ]
+    # unseen_gse_ids = [
+    #     # "GSE102177",
+    #     "GSE106648",
+    # ]
     print(f"Got '{len(unseen_gse_ids)}' unseen_gse_ids.")
 
     dt_curr_start = datetime.now()
@@ -173,4 +174,4 @@ def main(override):
 
 
 if __name__ == '__main__':
-    main(override=True) # &&&
+    main(override=False)
