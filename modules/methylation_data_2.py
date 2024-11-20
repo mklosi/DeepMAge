@@ -1,3 +1,8 @@
+"""
+This code will get methylation amounts per study using the <>_series_matrix.txt.
+More efficient, but some studies have their data in IDAT format, not in _series_matrix.txt files.
+"""
+
 import gzip
 import io
 from datetime import datetime
@@ -147,11 +152,10 @@ def main(override):
         df = pd.DataFrame()
         seen_gse_ids = []
 
-    unseen_gse_ids = sorted(set(gse_ids) - set(seen_gse_ids))
-    # unseen_gse_ids = [
-    #     # "GSE102177",
-    #     "GSE106648",
-    # ]
+    # unseen_gse_ids = sorted(set(gse_ids) - set(seen_gse_ids))
+    unseen_gse_ids = [
+        "GSE125105",
+    ]
     print(f"Got '{len(unseen_gse_ids)}' unseen_gse_ids.")
 
     dt_curr_start = datetime.now()
@@ -174,4 +178,4 @@ def main(override):
 
 
 if __name__ == '__main__':
-    main(override=False)
+    main(override=True)

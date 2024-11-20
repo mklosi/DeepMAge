@@ -7,13 +7,14 @@ readme = "README.md"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "~3.10"
-pytest = "*"
 hyperopt = "*"
-requests = "*"
+methylprep = "*"
 pandas = "^2.2.2"
 psutil = "*"
 pyarrow = "^17.0.0"
+pytest = "*"
+python = "~3.10"
+requests = "*"
 scikit-learn = "*"
 timeout-decorator = "*"
 torch = "*"

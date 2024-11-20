@@ -2,6 +2,7 @@ import pandas as pd
 from io import StringIO
 from memory import Memory
 
+
 if __name__ == '__main__':
 
     pd.set_option('display.max_columns', None)

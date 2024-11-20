@@ -1,3 +1,7 @@
+"""
+This code will get the methylation data from a URI, for each sample individually. Also, it contains bad data for some GSM_IDs.
+"""
+
 import re
 from datetime import datetime
 from pathlib import Path
