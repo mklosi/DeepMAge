@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+from pandas.core.computation.expr import intersection
 
 from memory import Memory
 from modules.api_handler import get_api_response
@@ -96,22 +97,49 @@ def main():
     df = pd.read_parquet(temp_methylation_path)
     df = df.loc[:, ~df.columns.str.endswith('_DetectionPval')]
     df = df.rename(columns={"ID_REF": cpg_site_id_str}).set_index(cpg_site_id_str).sort_index()
-    df = df.apply(pd.to_numeric, errors='coerce')
+    # matrix_normalized_df
+    mat_norm_df = df.apply(pd.to_numeric, errors='coerce')
 
-    missing_cpg_sites = sorted(set(cpg_sites_df.index.tolist()) - set(df.index.tolist()))
+    missing_cpg_sites = sorted(set(cpg_sites_df.index.tolist()) - set(mat_norm_df.index.tolist()))
     if missing_cpg_sites:
         print(f"The following cpg_sites are missing from the normalized table: {missing_cpg_sites}")
 
-    df.rename(columns=sample_title_mapping, inplace=True)
-    df = df[df.columns.intersection(metadata_gsm_ids)]
+    mat_norm_df.rename(columns=sample_title_mapping, inplace=True)
+    mat_norm_df = mat_norm_df[mat_norm_df.columns.intersection(metadata_gsm_ids)]
 
-    na_count = df.isna().sum().sum()
+    na_count = mat_norm_df.isna().sum().sum()
     if na_count > 0:
         print(f"Number of cells with NaN values: {na_count}")
 
+    # --- this is where we start to process the IDAT stuff.
 
+    ## Read in the sample_sheet_meta_data.parquet and get the mapping b/n sample_id -> gsm_id
 
+    sample_sheet_meta_path = "resources/GSE125105_RAW_few/sample_sheet_meta_data.parquet"
+    df_ = pd.read_parquet(sample_sheet_meta_path)
+    df_ = df_.rename(columns={"GSM_ID": "gsm_id", "Sample_ID": "sample_id"})
+    df_ = df_[["gsm_id", "sample_id"]]
+    sample_id_to_gsm_id = df_.set_index('sample_id')['gsm_id'].to_dict()
 
+    # &&& we need to re-enable this when we get the full gsm_id set.
+    # df_ = df_[df_.columns.intersection(metadata_gsm_ids)]
+
+    ## Read in the beta values from beta_values.parquet
+
+    # these are run through the methylprep pipline with `run_pipeline`.
+    beta_values_idat_path = "resources/GSE125105_RAW_few/beta_values.parquet"
+    df_ = pd.read_parquet(beta_values_idat_path)
+    df_ = df_[df_.index.isin(cpg_sites_df.index)].sort_index()
+    idat_df = df_.rename(columns=sample_id_to_gsm_id)
+
+    mat_norm_filt_df = mat_norm_df[mat_norm_df.columns.intersection(idat_df.columns)]
+
+    # rename columns
+    mat_norm_filt_df = mat_norm_filt_df.add_suffix("_mat_norm")
+    idat_df = idat_df.add_suffix("_idat")
+
+    df = pd.merge(idat_df, mat_norm_filt_df, left_index=True, right_index=True, how='left')
+    df = df[sorted(df.columns)]
 
 
 

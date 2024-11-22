@@ -37,19 +37,32 @@ def main():
     cpg_sites_df = pd.read_parquet(cpg_sites_path).sort_index()  # sorting just in case.
     print(f"Got '{len(cpg_sites_df)}' cpg sites.")
 
+    # --- IDAT reading and structuring
+
+    # # idat_directory = 'resources/GSE125105_RAW/'
+    # idat_directory = 'resources/GSE125105_RAW_few/'
+    #
+    # run_pipeline(
+    #     idat_directory,
+    #     betas=True,   # Calculates beta values
+    #     m_value=True,  # Calculates M-values
+    #     make_sample_sheet=True,  # If you don't have a sample sheet
+    #     file_format="parquet",
+    # )
+
+    # -------------------------------------
 
 
 
 
-    idat_directory = 'resources/GSE125105_RAW/'
 
-    run_pipeline(
-        idat_directory,
-        export=True,  # Exports processed data to CSV
-        betas=True,   # Calculates beta values
-        m_value=True, # Calculates M-values
-        no_sample_sheet=True # If you don't have a sample sheet
-    )
+
+
+
+
+
+
+
 
     fjdkfjdk = 1
 
