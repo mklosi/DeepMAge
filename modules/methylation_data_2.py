@@ -23,11 +23,12 @@ base_url = (
 )
 
 
-def extract_matrix_table(lines):
+def extract_series_matrix(file, cond_):
     extracting = False
+    header = True
     extracted_lines = []
 
-    for line in lines:
+    for line in file:
         if line.startswith("!series_matrix_table_begin"):
             extracting = True
             continue  # Skip the marker line itself
@@ -35,28 +36,44 @@ def extract_matrix_table(lines):
             break  # Stop reading after the end marker
 
         if extracting:
-            extracted_lines.append(line)
+            ls_ = line.replace('"', '').split('\t')
+            if header or ls_[0] in cond_:
+                extracted_lines.append(ls_)
+                header = False
 
-    return extracted_lines
+    columns = extracted_lines[0]
+    data = extracted_lines[1:]
+
+    return columns, data
 
 
 def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
+
+    # &&& change to cond_ outside of this.
+    cond_ = set(cpg_sites_df.index.tolist())
 
     three_digits = gse_id[:-3]
     url = base_url.replace(gse_id_three_digits_pattern, three_digits).replace(gse_id_pattern, gse_id)
     response = get_api_response(request_type="GET", url=url)
 
+    # temp_methylation_path = "resources/GSE125105_matrix_normalized.txt"
+    # headers = None
+    # lines_by_cpg_site_id = []
+    # processed = 0
+    # print_progress_every = 10000
+    # with open(temp_methylation_path, "r") as file:
+    #     headers = [header.strip() for header in file.readline().split()]
+    #     for line in file:
+    #         values = [val.strip() for val in line.split()][1:]  # remove the leading index.
+    #         if values[0] in cpg_sites_df.index.tolist():
+    #             lines_by_cpg_site_id.append(values)
+    #         processed += 1
+    #         if processed % print_progress_every == 0:
+    #             print(f"Processed lines so far: {processed}")
+    #     print(f"Total lines processed: {processed}")
+
     with gzip.open(io.BytesIO(response.content), 'rt') as file:
-        lines = file.readlines()  # This will give you a list of strings, one per line
-
-    matrix_table_lines = extract_matrix_table(lines)
-
-    data = [line.replace('"', '').split('\t') for line in matrix_table_lines]
-    columns = data[0]
-    data = data[1:]
-
-    cond_ = set(cpg_sites_df.index.tolist())
-    data = [ls_ for ls_ in data if ls_[0] in cond_]
+        columns, data = extract_series_matrix(file, cond_)
 
     curr_df = pd.DataFrame(data, columns=columns)
     curr_df = curr_df.rename(columns={'ID_REF': cpg_site_id_str})
@@ -122,7 +139,7 @@ def main(override):
 
     mem.log_memory(print, "before_fetching")
 
-    methylation_data_parquet_path = Path("resources/methylation_data_1.parquet")
+    methylation_data_parquet_path = Path("resources/methylation_data_3.parquet")
     # methylation_data_parquet_path = Path("resources/methylation_data_{max_iters}.parquet")
     seen_gse_id_path = Path("states/seen_gse_id.txt")
     if methylation_data_parquet_path.exists() and seen_gse_id_path.exists() and not override:
@@ -140,31 +157,31 @@ def main(override):
         "GSE102177",
         "GSE103911",
         "GSE105123",
-        "GSE106648",
-        "GSE107459",
-        "GSE107737",
-        "GSE112696",
-        "GSE19711",
-        "GSE20067",
-        "GSE27044",
-        "GSE30870",
-        "GSE34639",
-        "GSE37008",
-        "GSE40279",
-        "GSE41037",
-        "GSE52588",
-        "GSE53740",
-        "GSE58119",
-        "GSE67530",
-        "GSE77445",
-        "GSE79329",
-        "GSE81961",
-        "GSE84624",
-        "GSE87582",
-        "GSE87640",
-        "GSE97362",
-        "GSE98876",
-        "GSE99624",
+        # "GSE106648",
+        # "GSE107459",
+        # "GSE107737",
+        # "GSE112696",
+        # "GSE19711",
+        # "GSE20067",
+        # "GSE27044",
+        # "GSE30870",
+        # "GSE34639",
+        # "GSE37008",
+        # "GSE40279",
+        # "GSE41037",
+        # "GSE52588",
+        # "GSE53740",
+        # "GSE58119",
+        # "GSE67530",
+        # "GSE77445",
+        # "GSE79329",
+        # "GSE81961",
+        # "GSE84624",
+        # "GSE87582",
+        # "GSE87640",
+        # "GSE97362",
+        # "GSE98876",
+        # "GSE99624",
     ]
     unseen_gse_ids = sorted(set(gse_ids) - set(seen_gse_ids))
     print(f"Got '{len(unseen_gse_ids)}' unseen_gse_ids.")
@@ -175,9 +192,11 @@ def main(override):
         print(f"Running gse_id: {gse_id}")
         df = append_to_df(df, gse_id, metadata_gsm_ids, cpg_sites_df)
         print(f"df.shape: {df.shape}")
+
         df.to_parquet(methylation_data_parquet_path, engine='pyarrow', index=True)
         seen_gse_ids.append(gse_id)
         seen_gse_id_path.write_text("\n".join(seen_gse_ids) + "\n")
+
         mem.log_memory(print, gse_id)
         dt_curr_end = datetime.now()
         print(f"Diff   runtime: {dt_curr_end - dt_curr_start}")
