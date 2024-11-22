@@ -15,7 +15,7 @@ if __name__ == '__main__':
     mem.log_memory(print, "before____")
 
     # path = "resources/metadata.parquet"
-    path = "resources/methylation_data_1.parquet"
+    path = "resources/methylation_data.parquet"
 
     # path = "resources/GSE125105_RAW_few/beta_values.parquet"
     # path = "resources/GSE125105_RAW_few/control_probes.parquet"
@@ -39,19 +39,18 @@ if __name__ == '__main__':
     # missing_df["missing_count"] = missing_df["missing_columns"].apply(len)
     # missing_df = missing_df.sort_values(by="missing_count", ascending=False)
 
-    path = "resources/methylation_data_2.parquet"
-    df2 = pd.read_parquet(path)
-
-
-    # df2.loc["GSM1401026", "cg00047050"] = 0.00882101
-
-    pd.testing.assert_frame_equal(df, df2)
-
-
+    # path = "resources/methylation_data_3.parquet"
+    # df2 = pd.read_parquet(path)
+    #
+    # # df2.loc["GSM1401026", "cg00047050"] = 0.00882101
+    #
+    # pd.testing.assert_frame_equal(df, df2)
 
 
 
 
-    # print(df)
+
+
+    print(df)
 
     mem.log_memory(print, "after_save")
