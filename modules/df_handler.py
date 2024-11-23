@@ -5,8 +5,8 @@ from memory import Memory
 
 if __name__ == '__main__':
 
-    pd.set_option('display.max_columns', None)
-    pd.set_option('display.min_rows', 100)
+    pd.set_option('display.max_columns', 10)
+    pd.set_option('display.min_rows', 20)
     pd.set_option('display.max_rows', 100)
     pd.set_option('display.max_colwidth', None)
     pd.set_option('display.width', None)
@@ -39,7 +39,7 @@ if __name__ == '__main__':
     # missing_df["missing_count"] = missing_df["missing_columns"].apply(len)
     # missing_df = missing_df.sort_values(by="missing_count", ascending=False)
 
-    # path = "resources/methylation_data_3.parquet"
+    # path = "resources/methylation_data_2.parquet"
     # df2 = pd.read_parquet(path)
     #
     # # df2.loc["GSM1401026", "cg00047050"] = 0.00882101
@@ -47,10 +47,20 @@ if __name__ == '__main__':
     # pd.testing.assert_frame_equal(df, df2)
 
 
+    # sort by missing values per gsm
+    row_nan_counts = df.isna().sum(axis=1)
+    row_nan_counts.name = "nan_count"
+    row_nan_counts = row_nan_counts.sort_values(ascending=False)
+
+    # sort by missing values per cpg_site
+    col_nan_counts = df.isna().sum(axis=0)
+    col_nan_counts.name = "nan_count"
+    col_nan_counts = col_nan_counts.sort_values(ascending=False)
 
 
 
 
     print(df)
+
 
     mem.log_memory(print, "after_save")

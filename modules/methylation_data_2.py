@@ -18,9 +18,9 @@ from modules.metadata import metadata_parquet_path, cpg_site_id_str, gsm_id_str
 
 gse_id_three_digits_pattern = "<three_digits>"
 gse_id_pattern = "<gse_id>"
-# this is the series_matrix url.
+
 series_matrix_source = {
-    "source_type": "series_matrix",
+    "source_type": "series_matrix",  # methyl data is in the series matrix itself.
     "source_url": (
         f"https://ftp.ncbi.nlm.nih.gov/geo/series/"
         f"{gse_id_three_digits_pattern}nnn/{gse_id_pattern}/matrix/"
@@ -35,28 +35,38 @@ matrix_normalized_source = {
         f"{gse_id_pattern}_matrix_normalized.txt.gz"
     )
 }
-matrix_processed_source = {
-    "source_type": "matrix_processed",  # methyl data is split by commas
+GSE59065_source = {  # GSE59065
+    "source_type": "GSE59065_source",  # methyl data is CSV - GSE59065_MatrixProcessed.csv.gz
     "source_url": (
         f"https://ftp.ncbi.nlm.nih.gov/geo/series/"
         f"{gse_id_three_digits_pattern}nnn/{gse_id_pattern}/suppl/"
         f"{gse_id_pattern}_MatrixProcessed.csv.gz"
     )
 }
-processed_source = {
-    "source_type": "matrix_processed",  # methyl data is split by commas
+GSE61496_source = {
+    "source_type": "GSE61496_source",  # methyl data is CSV - GSE61496_Processed.csv.gz
     "source_url": (
         f"https://ftp.ncbi.nlm.nih.gov/geo/series/"
         f"{gse_id_three_digits_pattern}nnn/{gse_id_pattern}/suppl/"
         f"{gse_id_pattern}_Processed.csv.gz"
     )
 }
-gse_id_to_extract_source = { # &&& turn into comprehension. if.
+GSE77696_source = {
+    "source_type": "GSE77696_source",  # methyl data is split by tabs - GSE77696_MatrixProcessed.txt.gz
+    "source_url": (
+        f"https://ftp.ncbi.nlm.nih.gov/geo/series/"
+        f"{gse_id_three_digits_pattern}nnn/{gse_id_pattern}/suppl/"
+        f"{gse_id_pattern}_MatrixProcessed.txt.gz"
+    )
+}
+
+# mapping.
+gse_id_to_extract_source = {
     "GSE125105": matrix_normalized_source,
     "GSE128235": matrix_normalized_source,
-    "GSE59065": matrix_processed_source,
-    "GSE61496": processed_source,
-    "GSE77696": matrix_normalized_source,
+    "GSE59065": GSE59065_source,
+    "GSE61496": GSE61496_source,
+    "GSE77696": GSE77696_source,
 }
 
 mem = Memory(noop=False)
@@ -71,23 +81,45 @@ def get_sample_title_to_gsm_id_mapping(file, source_type):
 
     for line in file:
         if line.startswith("!Sample_title"):
-            samples_title_ls = [token.strip() for token in line.split("\t")]
-            assert samples_title_ls[0] == "!Sample_title"
-            if source_type == "matrix_processed":
-                samples_title_ls = [s.replace('"', '') for s in samples_title_ls[1:]]
-            else:
+            ls_ = [token.strip() for token in line.split("\t")]
+            assert ls_[0] == "!Sample_title"
+
+            if source_type == "matrix_normalized":
                 pattern = r"sample ?(\d+)"
                 samples_title_ls = [
                     f"sample{re.search(pattern, s).group(1)}"
-                    for s in samples_title_ls[1:]
+                    for s in ls_[1:]
                 ]
-        # this for now is only true for `matrix_processed`. Override !Sample_title.
+            elif source_type == "GSE59065_source":
+                samples_title_ls = [s.replace('"', '') for s in ls_[1:]]
+            elif source_type == "GSE61496_source":
+                continue
+            elif source_type == "GSE77696_source":
+                continue
+            else:
+                raise ValueError(f"Bad source_type: {source_type}")
+
         elif line.startswith("!Sample_description"):
-            samples_title_ls = [token.strip() for token in line.split("\t")]
-            assert samples_title_ls[0] == "!Sample_description"
-            if samples_title_ls[1] == '"MZ twin"':
-                continue  # this is the first `!Sample_description` line. we need the 2nd.
-            samples_title_ls = [s.replace('"', '') for s in samples_title_ls[1:]]
+            ls_ = [token.strip() for token in line.split("\t")]
+            assert ls_[0] == "!Sample_description"
+
+            if source_type == "matrix_normalized":
+                continue
+            elif source_type == "GSE59065_source":
+                continue
+            elif source_type == "GSE61496_source":
+                if ls_[1] == '"MZ twin"':
+                    continue  # this is the first `!Sample_description` line. we need the 2nd.
+                samples_title_ls = [s.replace('"', '') for s in ls_[1:]]
+            elif source_type == "GSE77696_source":
+                pattern = r"Sample (\d+)"
+                samples_title_ls = [
+                    f"Sample {re.search(pattern, s).group(1)}"
+                    for s in ls_[1:]
+                ]
+            else:
+                raise ValueError(f"Bad source_type: {source_type}")
+
         elif line.startswith("!Series_sample_id"):
             series_sample_id_ls = [token.strip().replace('"', '') for token in line.split("\t")]
             series_sample_id_ls = [gsm_id.strip() for gsm_id in series_sample_id_ls[1].split()]
@@ -131,37 +163,43 @@ def get_series_matrix_df(file, cond_):
     return df
 
 
-def get_matrix_normalized_df(file, cond_):
+def get_matrix_norm_df(file, cond_, source_type):
     lines_by_cpg_site_id = []
     processed = 0
     print_progress_every = 10000
-    columns = [header.strip() for header in file.readline().split()]
-    for line in file:
-        values = [val.strip() for val in line.split()][1:]  # remove the leading index.
-        if values[0] in cond_: # &&& filter.
-        # if True:
-            lines_by_cpg_site_id.append(values)
-        processed += 1
-        if processed % print_progress_every == 0:
-            print(f"Processed lines so far: {processed}")
-    print(f"Total lines processed: {processed}")
 
-    df = pd.DataFrame(lines_by_cpg_site_id, columns=columns)
-    df = df.loc[:, ~df.columns.str.endswith('_DetectionPval')]
+    if source_type == "matrix_normalized":
+        columns = [header.strip() for header in file.readline().split('\t')]
+        # special case for GSE128235
+        if columns[0] == '':
+            columns = columns[1:]
+    elif source_type == "GSE59065_source":
+        columns = [header.strip().replace('"', '') for header in file.readline().split(",")]
+    elif source_type == "GSE61496_source":
+        columns = [header.strip().replace('"', '') for header in file.readline().split(",")]
+    elif source_type == "GSE77696_source":
+        file.readline()  # remove the first line, since it's a comment.
+        columns = [header.strip() for header in file.readline().split('\t')]
+    else:
+        raise ValueError(f"Bad source_type: {source_type}")
 
-    return df
-
-
-def get_matrix_processed_df(file, cond_):
-    lines_by_cpg_site_id = []
-    processed = 0
-    print_progress_every = 10000
-    columns = [header.strip().replace('"', '') for header in file.readline().split(",")] # &&& diff x2
     # special case for `processed`.
     if columns[0] == '':
         columns[0] = 'ID_REF'
+
     for line in file:
-        values = [val.strip().replace('"', '') for val in line.split(",")]  # remove the leading index.  # &&& diff x3
+
+        if source_type == "matrix_normalized":
+            values = [val.strip() for val in line.split()][1:]  # remove the leading index.
+        elif source_type == "GSE59065_source":
+            values = [val.strip().replace('"', '') for val in line.split(",")]
+        elif source_type == "GSE61496_source":
+            values = [val.strip().replace('"', '') for val in line.split(",")]
+        elif source_type == "GSE77696_source":
+            values = [val.strip() for val in line.split()]
+        else:
+            raise ValueError(f"Bad source_type: {source_type}")
+
         if values[0] in cond_: # &&& filter.
         # if True:
             lines_by_cpg_site_id.append(values)
@@ -206,7 +244,7 @@ def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
     if gse_id in gse_id_to_extract_source:
         content = io.BytesIO(response.content)
         with gzip.open(content, 'rt') as file:
-            # &&&
+            # &&& swap
             sample_title_mapping = get_sample_title_to_gsm_id_mapping(
                 file,
                 gse_id_to_extract_source[gse_id]["source_type"]
@@ -226,15 +264,10 @@ def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
         # mem.log_memory(print, "matrix_normalized")
         # print(f"matrix_normalized response runtime: {datetime.now() - dt_response}")
 
-        # content = 'resources/GSE125105_matrix_normalized_small.txt.gz' # &&&
+        # content = 'resources/GSE125105_matrix_normalized_small.txt.gz' # &&& swap
 
         with gzip.open(content, 'rt') as file:
-            if gse_id_to_extract_source[gse_id]["source_type"] == "matrix_normalized":
-                curr_df = get_matrix_normalized_df(file, cond_)
-            elif gse_id_to_extract_source[gse_id]["source_type"] == "matrix_processed":
-                curr_df = get_matrix_processed_df(file, cond_)
-            else:
-                raise ValueError(f"Bad source_type: {gse_id_to_extract_source[gse_id]['source_type']}")
+            curr_df = get_matrix_norm_df(file, cond_, gse_id_to_extract_source[gse_id]["source_type"])
 
     curr_df.columns = curr_df.columns.str.strip()
     curr_df = curr_df.rename(columns=column_renames)
@@ -249,7 +282,7 @@ def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
             f"Appending NaN values for each sample."
         )
 
-        # &&&
+        # &&& fyi.
         if len(ls_) == 1000:
             raise ValueError(
                 f"The following '{len(ls_)}' CpG sites from cpg_sites_df are missing in curr_df '{ls_}'. "
@@ -314,8 +347,8 @@ def main(override):
 
     # &&&
     gse_ids = [
-        # "GSE102177",
-        # "GSE103911",
+        "GSE102177",
+        "GSE103911",
         # "GSE105123",
         # "GSE106648",
         # "GSE107459",
@@ -342,11 +375,11 @@ def main(override):
         # "GSE97362",
         # "GSE98876",
         # "GSE99624",
-
+        #
         # "GSE125105",
         # "GSE128235",
         # "GSE59065",
-        "GSE61496",
+        # "GSE61496",
         # "GSE77696",
     ]
     unseen_gse_ids = sorted(set(gse_ids) - set(seen_gse_ids))
