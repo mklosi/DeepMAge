@@ -43,11 +43,19 @@ matrix_processed_source = {
         f"{gse_id_pattern}_MatrixProcessed.csv.gz"
     )
 }
+processed_source = {
+    "source_type": "matrix_processed",  # methyl data is split by commas
+    "source_url": (
+        f"https://ftp.ncbi.nlm.nih.gov/geo/series/"
+        f"{gse_id_three_digits_pattern}nnn/{gse_id_pattern}/suppl/"
+        f"{gse_id_pattern}_Processed.csv.gz"
+    )
+}
 gse_id_to_extract_source = { # &&& turn into comprehension. if.
     "GSE125105": matrix_normalized_source,
     "GSE128235": matrix_normalized_source,
     "GSE59065": matrix_processed_source,
-    "GSE61496": matrix_normalized_source,
+    "GSE61496": processed_source,
     "GSE77696": matrix_normalized_source,
 }
 
@@ -73,6 +81,13 @@ def get_sample_title_to_gsm_id_mapping(file, source_type):
                     f"sample{re.search(pattern, s).group(1)}"
                     for s in samples_title_ls[1:]
                 ]
+        # this for now is only true for `matrix_processed`. Override !Sample_title.
+        elif line.startswith("!Sample_description"):
+            samples_title_ls = [token.strip() for token in line.split("\t")]
+            assert samples_title_ls[0] == "!Sample_description"
+            if samples_title_ls[1] == '"MZ twin"':
+                continue  # this is the first `!Sample_description` line. we need the 2nd.
+            samples_title_ls = [s.replace('"', '') for s in samples_title_ls[1:]]
         elif line.startswith("!Series_sample_id"):
             series_sample_id_ls = [token.strip().replace('"', '') for token in line.split("\t")]
             series_sample_id_ls = [gsm_id.strip() for gsm_id in series_sample_id_ls[1].split()]
@@ -142,6 +157,9 @@ def get_matrix_processed_df(file, cond_):
     processed = 0
     print_progress_every = 10000
     columns = [header.strip().replace('"', '') for header in file.readline().split(",")] # &&& diff x2
+    # special case for `processed`.
+    if columns[0] == '':
+        columns[0] = 'ID_REF'
     for line in file:
         values = [val.strip().replace('"', '') for val in line.split(",")]  # remove the leading index.  # &&& diff x3
         if values[0] in cond_: # &&& filter.
@@ -153,7 +171,9 @@ def get_matrix_processed_df(file, cond_):
     print(f"Total lines processed: {processed}")
 
     df = pd.DataFrame(lines_by_cpg_site_id, columns=columns)
-    df = df.loc[:, ~df.columns.str.endswith('_DetectionPval')]
+    df = df.loc[:, ~(
+        df.columns.str.endswith('_DetectionPval') | df.columns.str.endswith('Detection Pval')
+    )]
 
     return df
 
@@ -325,8 +345,8 @@ def main(override):
 
         # "GSE125105",
         # "GSE128235",
-        "GSE59065",
-        # "GSE61496",
+        # "GSE59065",
+        "GSE61496",
         # "GSE77696",
     ]
     unseen_gse_ids = sorted(set(gse_ids) - set(seen_gse_ids))
