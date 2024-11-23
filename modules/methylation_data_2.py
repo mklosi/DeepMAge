@@ -28,17 +28,25 @@ series_matrix_source = {
     )
 }
 matrix_normalized_source = {
-    "source_type": "matrix_normalized",
+    "source_type": "matrix_normalized",  # methyl data is split by tabs
     "source_url": (
         f"https://ftp.ncbi.nlm.nih.gov/geo/series/"
         f"{gse_id_three_digits_pattern}nnn/{gse_id_pattern}/suppl/"
         f"{gse_id_pattern}_matrix_normalized.txt.gz"
     )
 }
+matrix_processed_source = {
+    "source_type": "matrix_processed",  # methyl data is split by commas
+    "source_url": (
+        f"https://ftp.ncbi.nlm.nih.gov/geo/series/"
+        f"{gse_id_three_digits_pattern}nnn/{gse_id_pattern}/suppl/"
+        f"{gse_id_pattern}_MatrixProcessed.csv.gz"
+    )
+}
 gse_id_to_extract_source = { # &&& turn into comprehension. if.
     "GSE125105": matrix_normalized_source,
     "GSE128235": matrix_normalized_source,
-    "GSE59065": matrix_normalized_source,
+    "GSE59065": matrix_processed_source,
     "GSE61496": matrix_normalized_source,
     "GSE77696": matrix_normalized_source,
 }
@@ -57,8 +65,11 @@ def get_sample_title_to_gsm_id_mapping(file):
         if line.startswith("!Sample_title"):
             samples_title_ls = [token.strip() for token in line.split("\t")]
             assert samples_title_ls[0] == "!Sample_title"
-            pattern = r"(sample\d+)"
-            samples_title_ls = [re.search(pattern, s).group(0) for s in samples_title_ls[1:]]
+            pattern = r"sample ?(\d+)"
+            samples_title_ls = [
+                f"sample{re.search(pattern, s).group(1)}"
+                for s in samples_title_ls[1:]
+            ]
         elif line.startswith("!Series_sample_id"):
             series_sample_id_ls = [token.strip().replace('"', '') for token in line.split("\t")]
             series_sample_id_ls = [gsm_id.strip() for gsm_id in series_sample_id_ls[1].split()]
@@ -93,6 +104,7 @@ def get_series_matrix_df(file, cond_):
         if extracting:
             ls_ = line.replace('"', '').split('\t')
             if header or ls_[0] in cond_:
+                # noinspection PyTypeChecker
                 extracted_lines.append(ls_)
                 header = False
 
@@ -122,6 +134,27 @@ def get_matrix_normalized_df(file, cond_):
     return df
 
 
+def get_matrix_processed_df(file, cond_):
+    lines_by_cpg_site_id = []
+    processed = 0
+    print_progress_every = 10000
+    columns = [header.strip().replace('"', '') for header in file.readline().split(",")] # &&& diff x2
+    for line in file:
+        values = [val.strip().replace('"', '') for val in line.split(",")]  # remove the leading index.  # &&& diff x3
+        if values[0] in cond_: # &&& filter.
+        # if True:
+            lines_by_cpg_site_id.append(values)
+        processed += 1
+        if processed % print_progress_every == 0:
+            print(f"Processed lines so far: {processed}")
+    print(f"Total lines processed: {processed}")
+
+    df = pd.DataFrame(lines_by_cpg_site_id, columns=columns)
+    df = df.loc[:, ~df.columns.str.endswith('_DetectionPval')]
+
+    return df
+
+
 def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
 
     # &&& change to cond_ outside of this.
@@ -135,11 +168,11 @@ def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
         .replace(gse_id_pattern, gse_id)
     )
 
-    dt_response = datetime.now()
+    # dt_response = datetime.now()
     response = get_api_response(request_type="GET", url=series_matrix_url)
     content = io.BytesIO(response.content)
-    mem.log_memory(print, "series_matrix")
-    print(f"series_matrix response runtime: {datetime.now() - dt_response}") # &&& remove these. they are just distracting.
+    # mem.log_memory(print, "series_matrix")
+    # print(f"series_matrix response runtime: {datetime.now() - dt_response}") # &&& remove these. they are just distracting.
 
     with gzip.open(content, 'rt') as file:
         curr_df = get_series_matrix_df(file, cond_)
@@ -150,7 +183,9 @@ def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
     if gse_id in gse_id_to_extract_source:
         content = io.BytesIO(response.content)
         with gzip.open(content, 'rt') as file:
-            sample_title_mapping = get_sample_title_to_gsm_id_mapping(file)
+            # &&&
+            # sample_title_mapping = get_sample_title_to_gsm_id_mapping(file)
+            sample_title_mapping = {}
             column_renames.update(sample_title_mapping)
 
         mat_norm_url = (
@@ -159,16 +194,21 @@ def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
             .replace(gse_id_pattern, gse_id)
         )
 
-        dt_response = datetime.now()
+        # dt_response = datetime.now()
         response = get_api_response(request_type="GET", url=mat_norm_url)
         content = io.BytesIO(response.content)
-        mem.log_memory(print, "matrix_normalized")
-        print(f"matrix_normalized response runtime: {datetime.now() - dt_response}")
+        # mem.log_memory(print, "matrix_normalized")
+        # print(f"matrix_normalized response runtime: {datetime.now() - dt_response}")
 
         # content = 'resources/GSE125105_matrix_normalized_small.txt.gz' # &&&
 
         with gzip.open(content, 'rt') as file:
-            curr_df = get_matrix_normalized_df(file, cond_)
+            if gse_id_to_extract_source[gse_id]["source_type"] == "matrix_normalized":
+                curr_df = get_matrix_normalized_df(file, cond_)
+            elif gse_id_to_extract_source[gse_id]["source_type"] == "matrix_processed":
+                curr_df = get_matrix_processed_df(file, cond_)
+            else:
+                raise ValueError(f"Bad source_type: {gse_id_to_extract_source[gse_id]['source_type']}")
 
     curr_df.columns = curr_df.columns.str.strip()
     curr_df = curr_df.rename(columns=column_renames)
@@ -248,7 +288,7 @@ def main(override):
 
     # &&&
     gse_ids = [
-        "GSE102177",
+        # "GSE102177",
         # "GSE103911",
         # "GSE105123",
         # "GSE106648",
@@ -277,9 +317,9 @@ def main(override):
         # "GSE98876",
         # "GSE99624",
 
-        "GSE125105",
+        # "GSE125105",
         # "GSE128235",
-        # "GSE59065",
+        "GSE59065",
         # "GSE61496",
         # "GSE77696",
     ]
