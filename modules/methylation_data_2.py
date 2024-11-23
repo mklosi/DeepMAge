@@ -54,7 +54,7 @@ gse_id_to_extract_source = { # &&& turn into comprehension. if.
 mem = Memory(noop=False)
 
 
-def get_sample_title_to_gsm_id_mapping(file):
+def get_sample_title_to_gsm_id_mapping(file, source_type):
 
     samples_title_ls = []
     series_sample_id_ls = []
@@ -65,11 +65,14 @@ def get_sample_title_to_gsm_id_mapping(file):
         if line.startswith("!Sample_title"):
             samples_title_ls = [token.strip() for token in line.split("\t")]
             assert samples_title_ls[0] == "!Sample_title"
-            pattern = r"sample ?(\d+)"
-            samples_title_ls = [
-                f"sample{re.search(pattern, s).group(1)}"
-                for s in samples_title_ls[1:]
-            ]
+            if source_type == "matrix_processed":
+                samples_title_ls = [s.replace('"', '') for s in samples_title_ls[1:]]
+            else:
+                pattern = r"sample ?(\d+)"
+                samples_title_ls = [
+                    f"sample{re.search(pattern, s).group(1)}"
+                    for s in samples_title_ls[1:]
+                ]
         elif line.startswith("!Series_sample_id"):
             series_sample_id_ls = [token.strip().replace('"', '') for token in line.split("\t")]
             series_sample_id_ls = [gsm_id.strip() for gsm_id in series_sample_id_ls[1].split()]
@@ -184,8 +187,11 @@ def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
         content = io.BytesIO(response.content)
         with gzip.open(content, 'rt') as file:
             # &&&
-            # sample_title_mapping = get_sample_title_to_gsm_id_mapping(file)
-            sample_title_mapping = {}
+            sample_title_mapping = get_sample_title_to_gsm_id_mapping(
+                file,
+                gse_id_to_extract_source[gse_id]["source_type"]
+            )
+            # sample_title_mapping = {}
             column_renames.update(sample_title_mapping)
 
         mat_norm_url = (
