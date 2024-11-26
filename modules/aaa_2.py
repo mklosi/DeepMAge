@@ -30,25 +30,19 @@ def main():
     mem.log_memory(print, "before____")
     dt_start = datetime.now()
 
-    metadata_gsm_ids = pd.read_parquet(metadata_parquet_path).index.tolist()
-    print(f"Got '{len(metadata_gsm_ids)}' metadata_gsm_ids.")
-
-    cpg_sites_path = f"resources/cpg_sites.parquet"
-    cpg_sites_df = pd.read_parquet(cpg_sites_path).sort_index()  # sorting just in case.
-    print(f"Got '{len(cpg_sites_df)}' cpg sites.")
-
     # --- IDAT reading and structuring
 
-    # # idat_directory = 'resources/GSE125105_RAW/'
-    # idat_directory = 'resources/GSE125105_RAW_few/'
-    #
-    # run_pipeline(
-    #     idat_directory,
-    #     betas=True,   # Calculates beta values
-    #     m_value=True,  # Calculates M-values
-    #     make_sample_sheet=True,  # If you don't have a sample sheet
-    #     file_format="parquet",
-    # )
+    # idat_directory = 'resources/GSE125105_RAW/'
+    idat_directory = 'resources/GSE125105_RAW_small/'
+
+    run_pipeline(
+        idat_directory,
+        betas=True,   # Calculates beta values
+        save_control=False,
+        m_value=True,  # Calculates M-values
+        make_sample_sheet=True,  # If you don't have a sample sheet
+        file_format="parquet",
+    )
 
     # -------------------------------------
 

@@ -9,9 +9,8 @@ package-mode = false
 [tool.poetry.dependencies]
 hyperopt = "*"
 methylprep = "*"
-numpy = "^1.21.6"
-pandas = "^1.3.5"
-#pandas = "^2.2.2"
+numpy = "^1.24.3"
+pandas = "^1.5.3"
 psutil = "*"
 pyarrow = "^17.0.0"
 pytest = "*"
