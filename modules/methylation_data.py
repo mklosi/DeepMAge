@@ -42,18 +42,18 @@ def append_to_df(df, gsm_id, cpg_sites_df):
     else:
         raise ValueError(f"Bad number of columns for curr_df '{len(data[0])}'. gsm_id: '{gsm_id}'.")
 
-    curr_df = curr_df[curr_df['cpg_site'].isin(cpg_sites_df.index)]
+    curr_df = curr_df[curr_df['cpg_site'].isin(cpg_sites_df.row_index)]
     curr_df[gsm_id] = curr_df[gsm_id].replace("NULL", -1.0).astype(float)
     curr_df = curr_df.set_index('cpg_site').sort_index()
 
-    missing_sites = cpg_sites_df.index.difference(curr_df.index)
+    missing_sites = cpg_sites_df.row_index.difference(curr_df.row_index)
     if not missing_sites.empty:
         raise ValueError(f"The following CpG sites from cpg_sites_df are missing in curr_df: {missing_sites.tolist()}")
 
     if df.empty:
         df = curr_df
     else:
-        if not df.index.equals(curr_df.index):
+        if not df.row_index.equals(curr_df.row_index):
             raise ValueError("Mismatch in cpg_site values between DataFrames.")
         df = df.merge(curr_df, left_index=True, right_index=True)
 

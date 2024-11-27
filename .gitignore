@@ -4,4 +4,7 @@
 /*.iml
 __pycache__
 resources
+resources_methylprep
 states
+
+#GSE*

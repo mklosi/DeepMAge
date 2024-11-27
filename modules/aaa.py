@@ -100,7 +100,7 @@ def main():
     # matrix_normalized_df
     mat_norm_df = df.apply(pd.to_numeric, errors='coerce')
 
-    missing_cpg_sites = sorted(set(cpg_sites_df.index.tolist()) - set(mat_norm_df.index.tolist()))
+    missing_cpg_sites = sorted(set(cpg_sites_df.row_index.tolist()) - set(mat_norm_df.row_index.tolist()))
     if missing_cpg_sites:
         print(f"The following cpg_sites are missing from the normalized table: {missing_cpg_sites}")
 
@@ -129,7 +129,7 @@ def main():
     # these are run through the methylprep pipline with `run_pipeline`.
     beta_values_idat_path = "resources/GSE125105_RAW_few/beta_values.parquet"
     df_ = pd.read_parquet(beta_values_idat_path)
-    df_ = df_[df_.index.isin(cpg_sites_df.index)].sort_index()
+    df_ = df_[df_.index.isin(cpg_sites_df.row_index)].sort_index()
     idat_df = df_.rename(columns=sample_id_to_gsm_id)
 
     mat_norm_filt_df = mat_norm_df[mat_norm_df.columns.intersection(idat_df.columns)]

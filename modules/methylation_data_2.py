@@ -9,11 +9,11 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from memory import Memory
 from modules.api_handler import get_api_response
-from modules.gse_ids import gse_ids  # &&& is this really necessary?
 from modules.metadata import metadata_parquet_path, cpg_site_id_str, gsm_id_str
 
 gse_id_three_digits_pattern = "<three_digits>"
@@ -274,29 +274,51 @@ def append_to_df(df, gse_id, gsm_ids, cpg_sites_df):
     curr_df = curr_df.set_index(cpg_site_id_str).sort_index()
     curr_df = curr_df[sorted(curr_df.columns)]
 
-    missing_sites = cpg_sites_df.index.difference(curr_df.index)
-    if not missing_sites.empty:
-        ls_ = missing_sites.tolist()
+    missing_sites = sorted(set(cpg_sites_df.index).difference(set(curr_df.row_index)))
+    if missing_sites:
         print(
-            f"The following '{len(ls_)}' CpG sites from cpg_sites_df are missing in curr_df '{ls_}'. "
+            f"The following '{len(missing_sites)}' CpG sites from cpg_sites_df are missing in curr_df '{missing_sites}'. "
             f"Appending NaN values for each sample."
         )
 
         # &&& fyi.
-        if len(ls_) == 1000:
+        if len(missing_sites) == 1000:
             raise ValueError(
-                f"The following '{len(ls_)}' CpG sites from cpg_sites_df are missing in curr_df '{ls_}'. "
+                f"The following '{len(missing_sites)}' CpG sites from cpg_sites_df are missing in curr_df '{missing_sites}'. "
                 f"Appending NaN values for each sample."
             )
 
         curr_df = curr_df.reindex(cpg_sites_df.index).sort_index()
 
     curr_df = curr_df.apply(pd.to_numeric, errors='coerce')
+
+    # # &&&
+    #
+    # curr_df.to_parquet("resources/methylation_data_temp.parquet", engine='pyarrow', index=True)
+    #
+    # # path = "resources_methylprep/GSE102177_download_pandas_1.3.5/GPL13534/beta_values.pkl"
+    # path = "/Users/roise0r/intellij-projects/DeepMAge/resources_methylprep/GSE125105_download_pandas_1.3.5/GPL13534/beta_values.pkl"
+    #
+    # df = pd.read_pickle(path)
+    # df = df[df.row_index.isin(cpg_sites_df.index)]
+    #
+    # # path = "resources_methylprep/GSE102177_download_pandas_1.3.5/GPL13534/GSE102177_GPL13534_meta_data.pkl"
+    # path = "/Users/roise0r/intellij-projects/DeepMAge/resources_methylprep/GSE125105_download_pandas_1.3.5/GPL13534/GSE125105_GPL13534_meta_data.pkl"
+    #
+    # map_df = pd.read_pickle(path)
+    # sample_id_to_gsm_id = map_df.set_index("Sample_ID")["GSM_ID"].to_dict()
+    #
+    # df = df.rename(columns=sample_id_to_gsm_id)
+    # df = df[sorted(df.columns)]
+    # df = df.reindex(cpg_sites_df.index).sort_index()
+    #
+    # # &&& connect with previous
+
     curr_df = curr_df.T
-    curr_df.index.name = gsm_id_str
+    curr_df.row_index.name = gsm_id_str
     curr_df.columns.name = "cpg_site"  # &&& this needs to change and go somewhere else.
 
-    curr_df = curr_df[curr_df.index.isin(gsm_ids)]
+    curr_df = curr_df[curr_df.row_index.isin(gsm_ids)]
     print(f"Retrieved values for '{len(curr_df)}' new gsm_ids.")
 
     if df.empty:
@@ -347,8 +369,8 @@ def main(override):
 
     # &&&
     gse_ids = [
-        "GSE102177",
-        "GSE103911",
+        # "GSE102177", # +
+        # "GSE103911", # +
         # "GSE105123",
         # "GSE106648",
         # "GSE107459",
@@ -358,7 +380,7 @@ def main(override):
         # "GSE20067",
         # "GSE27044",
         # "GSE30870",
-        # "GSE34639",
+        "GSE34639",
         # "GSE37008",
         # "GSE40279",
         # "GSE41037",
@@ -376,7 +398,7 @@ def main(override):
         # "GSE98876",
         # "GSE99624",
         #
-        # "GSE125105",
+        # "GSE125105", # +
         # "GSE128235",
         # "GSE59065",
         # "GSE61496",

@@ -12,7 +12,7 @@ def rename_cols(df, mapping, key):
     df.columns = df.columns.str.replace(' ', '_').str.replace('-', '_').str.lower()
 
     df = df.set_index(gsm_id_str).add_prefix(key)
-    df.index.name = gsm_id_str
+    df.row_index.name = gsm_id_str
 
     return df
 
