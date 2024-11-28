@@ -218,16 +218,13 @@ class DeepMAgePredictor(DeepMAgeBase):
         # min_max_df = min_max_df.sort_values(by='cpg_site_id').reset_index(drop=True)
 
         metadata_df, methyl_df = self.split_df(df)
-
-        age_df = metadata_df[[self.age_col_str]] if self.age_col_str in metadata_df.columns else None
-
-        # &&&
         features = methyl_df.values
+
         # &&& metadata_df could be null during prediction???
         # &&& do we need to scale age?
         ages = metadata_df[self.age_col_str].values if self.age_col_str in metadata_df.columns else None
 
-        return methyl_df, age_df
+        return features, ages
 
     @staticmethod
     def split_data_by_type(df):
@@ -333,8 +330,6 @@ class DeepMAgePredictor(DeepMAgeBase):
         df["gse_id"] = "dummy-gse-id"
 
         features, _ = self.prepare_features(df, is_training=False)
-
-
         dataset = MethylationDataset(features, None, is_training=False)
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
 
