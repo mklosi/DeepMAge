@@ -22,6 +22,9 @@ pd.set_option('display.max_rows', 20)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', None)
 
+# &&&
+breakpointer = False
+
 
 def set_seeds(seed=42):
     # random.seed(seed)
@@ -76,7 +79,7 @@ class DeepMAgePredictor(DeepMAgeBase):
     methyl_df_path = "resources/methylation_data.parquet"
 
     age_col_str = "actual_age_years"
-    metadata_cols_of_interest = ["gse_id", "type", age_col_str] # &&& can I be reminded of the benefit of doing cls vs. self?
+    metadata_cols = ["gse_id", "type", age_col_str] # &&& can I be reminded of the benefit of doing cls vs. self?
 
     def __init__(self):
         self.imputer = SimpleImputer(strategy='median')
@@ -119,19 +122,17 @@ class DeepMAgePredictor(DeepMAgeBase):
 
     @classmethod
     def join_dfs(cls, metadata_df, methyl_df):
+        meta_cols = metadata_df.columns
         df = methyl_df.join(metadata_df, how="inner")
-        ## Rearrange cols, so the metadata cols are first.
-        cols = list(df.columns)
-        for i, col in enumerate(cls.metadata_cols_of_interest):
-            cols.insert(i, cols.pop(cols.index(col)))
-
-        df = df[cols]
+        # Rearrange cols, so the metadata cols are first.
+        df = df[[*meta_cols, *methyl_df]]
         return df
 
     @classmethod
     def split_df(cls, df):
-        metadata_df = df[cls.metadata_cols_of_interest]
-        methyl_df = df.drop(columns=cls.metadata_cols_of_interest)
+        meta_cols_curr = sorted(set(df.columns).intersection(set(cls.metadata_cols)))
+        metadata_df = df[meta_cols_curr]
+        methyl_df = df.drop(columns=meta_cols_curr)
         return metadata_df, methyl_df
 
     @classmethod
@@ -139,7 +140,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         metadata_df = pd.read_parquet(cls.metadata_df_path)
         methyl_df = pd.read_parquet(cls.methyl_df_path)
 
-        cols_to_drop = sorted(set(metadata_df.columns.tolist()) - set(cls.metadata_cols_of_interest))
+        cols_to_drop = sorted(set(metadata_df.columns.tolist()) - set(cls.metadata_cols))
         metadata_df = metadata_df.drop(columns=cols_to_drop)
 
         df = cls.join_dfs(metadata_df, methyl_df)
@@ -196,6 +197,8 @@ class DeepMAgePredictor(DeepMAgeBase):
         else:
             methyl_df = pd.DataFrame(self.imputer.transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns)
 
+        # &&& test that methyl_df doesn't change whenever we impute a df with no nans.
+
         ## normalize #$ docs
         df = self.join_dfs(metadata_df, methyl_df)
 
@@ -204,7 +207,7 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         df = df.groupby('gse_id', group_keys=False).apply(self.normalize_group)
 
-        # # checker
+        # # Check min and max values for each column. Needs work.
         # min_max_df = (
         #     methyl_df
         #     .agg(['min', 'max'])  # Compute min and max for each column
@@ -215,13 +218,16 @@ class DeepMAgePredictor(DeepMAgeBase):
         # min_max_df = min_max_df.sort_values(by='cpg_site_id').reset_index(drop=True)
 
         metadata_df, methyl_df = self.split_df(df)
-        features = methyl_df.values
 
+        age_df = metadata_df[[self.age_col_str]] if self.age_col_str in metadata_df.columns else None
+
+        # &&&
+        features = methyl_df.values
         # &&& metadata_df could be null during prediction???
         # &&& do we need to scale age?
         ages = metadata_df[self.age_col_str].values if self.age_col_str in metadata_df.columns else None
 
-        return features, ages
+        return methyl_df, age_df
 
     @staticmethod
     def split_data_by_type(df):
@@ -319,17 +325,23 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         return metric_results
 
-    def predict_batch(self, new_data):
+    def predict_batch(self, new_df, ref_df):
 
-        self.model.eval()
+        df = pd.concat([ref_df, new_df])
 
-        features, _ = self.prepare_features(new_data, is_training=False)
+        # Add a single-value gse_id as a column, so we can easily run normalization.
+        df["gse_id"] = "dummy-gse-id"
+
+        features, _ = self.prepare_features(df, is_training=False)
+
+
         dataset = MethylationDataset(features, None, is_training=False)
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
 
         predictions = []
-        gsm_ids = new_data.index.tolist()  # Preserve gsm_id for output
+        gsm_ids = new_df.index.tolist()  # Preserve gsm_id for output
 
+        self.model.eval()
         with torch.no_grad():
             for batch in loader:
                 features = batch["features"].to(self.device)
@@ -359,15 +371,28 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         # Loading a Saved Model and test again.
         predictor = cls.load_model(cls.model_path)
-        # test_df = test_df.sample(frac=1, random_state=43)
+        # Make sure that even if we shuffle test_df, we still get the same metrics.
+        test_df = test_df.sample(frac=1, random_state=24)
         _ = predictor.test_(test_df)
 
         # ## Make a prediction
         #
         # # Take the first 3 samples from test_df as new data
-        # new_data = test_df.head(3)
+        # batch_sample_count = 3
+        # new_data = test_df.head(batch_sample_count)
         # _, methyl_df = DeepMAgePredictor.split_df(new_data)
-        # predictions = predictor.predict_batch(methyl_df)
+        #
+        # # Rename the index, so it's more like actual new data.
+        # methyl_df.index = [f"sample_{i}" for i in range(batch_sample_count)]
+        #
+        # # Get reference df, so we can impute and normalize the new data (big source of contention conceptually).
+        # _, ref_df = DeepMAgePredictor.split_df(df)
+        #
+        # # &&&
+        # global breakpointer
+        # breakpointer = True
+        #
+        # predictions = predictor.predict_batch(methyl_df, ref_df)
         # print(f"Predictions for new data:\n{predictions}")
 
 
