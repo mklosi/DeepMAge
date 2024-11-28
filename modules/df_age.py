@@ -42,24 +42,26 @@ if __name__ == '__main__':
         "3.predicted_age_years",  # *
     ]].copy()
 
-    new_col = "type"
-    df[new_col] = np.where(
-        df["3.sample"].isin(["train", "ill_train"]),
-        "train",
-        "verification"
-    )
-
-    # Place new column in 3rd place
-    cols = list(df.columns)
-    cols.insert(2, cols.pop(cols.index(new_col)))
-    df = df[cols]
+    # new_col = "type"
+    # df[new_col] = np.where(
+    #     df["3.sample"].isin(["train", "ill_train"]),
+    #     "train",
+    #     "verification"
+    # )
+    #
+    # # Place new column in 3rd place
+    # cols = list(df.columns)
+    # cols.insert(2, cols.pop(cols.index(new_col)))
+    # df = df[cols]
 
     df["source"] = df["3.study"].map(gse_id_to_source).fillna("Unknown")
 
     col_rename = {
         "3.study": "gse_id",
         "source": "source",
-        "type": "type",
+        # "type": "type",
+        "3.sample": "type",
+        "2.health_status": "health_status",
         "3.actual_age_years": "actual_age_years",
         "3.predicted_age_years": "predicted_age_years",
     }
@@ -69,7 +71,7 @@ if __name__ == '__main__':
 
     age_df = df
 
-    # age_df.to_parquet("/Users/roise0r/intellij-projects/DeepMAge/resources/metadata_derived.parquet", engine='pyarrow', index=True)
+    age_df.to_parquet("/Users/roise0r/intellij-projects/DeepMAge/resources/metadata_derived.parquet", engine='pyarrow', index=True)
 
     # # Compare Series element-wise
     # s1 = df["3.pred_value"].round(3)

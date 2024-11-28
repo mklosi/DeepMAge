@@ -4,6 +4,7 @@ import torch.optim as optim
 from sklearn.preprocessing import MinMaxScaler
 import pandas as pd
 
+from modules.metadata import metadata_parquet_path
 from modules.ml_common import DeepMAgeBase, MethylationDataset, DataLoader
 from datetime import datetime
 
@@ -35,16 +36,22 @@ class DeepMAgeModel(nn.Module):
 class DeepMAgePredictor(DeepMAgeBase):
 
     model_path = "model_artifacts/model_option_3.pkl"
+    metadata_df_path = "resources/metadata_derived.parquet"
+    methyl_df_path = "resources/methylation_data.parquet"
 
-    def __init__(self, input_dim):
-        self.scaler = MinMaxScaler()
+    age_col_str = "actual_age_years"
+    metadata_cols_of_interest = ["gse_id", "type", age_col_str] # &&& can I be reminded of the benefit of doing cls vs. self?
+
+    def __init__(self):
+        self.input_dim = 1000
+        self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else
             "mps" if torch.backends.mps.is_available()
             else "cpu"
         )
-        self.model = DeepMAgeModel(input_dim=input_dim).to(self.device)
-        self.criterion = nn.MSELoss()
+        self.model = DeepMAgeModel(input_dim=self.input_dim).to(self.device)
+        self.criterion = nn.MSELoss()  # &&& use MAE. MAE aligns better with the metrics mentioned in the paper (MedAE and MAE).
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-4)
 
     @classmethod
@@ -56,39 +63,108 @@ class DeepMAgePredictor(DeepMAgeBase):
         print(f"Model loaded from: {model_path}")
         return instance
 
+    @classmethod
+    def new_model(cls):
+        return cls()
+
     def save_model(self, save_path):
         """Save the trained model."""
         torch.save(self.model.state_dict(), save_path)
         print(f"Model saved to: {save_path}")
 
-    @staticmethod
-    def load_data(file_path):
-        """Load and preprocess the methylation data."""
-        df = pd.read_parquet(file_path)
+    @classmethod
+    def join_dfs(cls, metadata_df, methyl_df):
+        df = methyl_df.join(metadata_df, how="inner")
+        ## Rearrange cols, so the metadata cols are first.
+        cols = list(df.columns)
+        for i, col in enumerate(cls.metadata_cols_of_interest):
+            cols.insert(i, cols.pop(cols.index(col)))
+
+        df = df[cols]
+        return df
+
+    @classmethod
+    def split_df(cls, df):
+        metadata_df = df[cls.metadata_cols_of_interest]
+        methyl_df = df.drop(columns=cls.metadata_cols_of_interest)
+        return metadata_df, methyl_df
+
+    @classmethod
+    def load_data(cls):
+        """&&& docs"""
+        metadata_df = pd.read_parquet(cls.metadata_df_path)
+        methyl_df = pd.read_parquet(cls.methyl_df_path)
+
+        cols_to_drop = sorted(set(metadata_df.columns.tolist()) - set(cls.metadata_cols_of_interest))
+        metadata_df = metadata_df.drop(columns=cols_to_drop)
+
+        df = cls.join_dfs(metadata_df, methyl_df)
+
+        df = df[df["type"].isin(["train", "verification"])]
+
+        # &&&
+        ## Show which gsm_ids have missing values and the corresponding cpg sites that contain those nans.
+        nan_counts = df.isna().sum(axis=1)  # Count NaNs per GSM ID
+        gsm_ids_with_nans = nan_counts[nan_counts > 0]
+        nan_cpg_sites = df.apply(lambda row: ','.join(row.index[row.isna()]), axis=1)
+        gsm_ids_with_nans_df = pd.DataFrame({
+            'gsm_id': gsm_ids_with_nans.index,
+            'nan_count': gsm_ids_with_nans.values,
+            'cpg_sites_with_nan': nan_cpg_sites[gsm_ids_with_nans.index].values
+        })
+
+        ## Show which cpg site ids have missing values and the corresponding gsm_ids that contain those nans.
+        nan_counts_per_cpg = df.isna().sum(axis=0)
+        cpg_sites_with_nans = nan_counts_per_cpg[nan_counts_per_cpg > 0]
+        nan_gsm_ids_per_cpg = df.apply(lambda col: ','.join(df.index[col.isna()]), axis=0)
+        cpg_sites_with_nans_df = pd.DataFrame({
+            'cpg_site_id': cpg_sites_with_nans.index,
+            'nan_count': cpg_sites_with_nans.values,
+            'gsm_ids_with_nan': nan_gsm_ids_per_cpg[cpg_sites_with_nans.index].values
+        })
+
+
+
+
         return df
 
     def prepare_features(self, df, is_training=True):
-        """Normalize features and split data."""
-        features = df.drop(columns=["age"]).values
+
+        metadata_df, methyl_df = self.split_df(df)
+        features = methyl_df.drop(columns=[self.age_col_str]).values
+
+
+
+
         if is_training:
             features = self.scaler.fit_transform(features)
         else:
             features = self.scaler.transform(features)
+
+
+
+
         ages = df["age"].values if "age" in df.columns else None
         return features, ages
 
     @staticmethod
-    def split_data(features, ages, test_size=0.2):
-        """Split data into training and validation sets."""
-        n_samples = len(features)
-        split_idx = int(n_samples * (1 - test_size))
-        return (
-            features[:split_idx], ages[:split_idx],
-            features[split_idx:], ages[split_idx:]
-        )
+    def split_data(df):
+        train_df = df[df["type"] == "train"]
+        test_df = df[df["type"] == "verification"]
+        return train_df, test_df
 
-    def train(self, train_loader, val_loader, epochs=50):
-        """Train the DeepMAge model."""
+    def train(self, train_df):
+
+
+
+
+        self.prepare_features(train_df, is_training=True)
+
+
+        train_dataset = MethylationDataset(train_df)
+
+
+
         self.model.train()
         for epoch in range(epochs):
             epoch_loss = 0
@@ -132,20 +208,28 @@ class DeepMAgePredictor(DeepMAgeBase):
         return predictions
 
     @classmethod
-    def training_pipeline(cls):
+    def train_pipeline(cls):
 
         predictor = cls.new_model()
 
-        # Load data
-        data_path = "resources/methylation_data.parquet"
-        df = predictor.load_data(data_path)
+        df = predictor.load_data()
 
-        # Prepare features and split
-        features, ages = predictor.prepare_features(df, is_training=True)
-        X_train, y_train, X_val, y_val = predictor.split_data(features, ages)
+        # Regular train on a single fold, test, and save a model.
+        train_df, test_df = predictor.split_data(df)
+        predictor.train(train_df)
+        predictor.test(test_df)
+        predictor.save_model(cls.model_path)
 
-        # Create DataLoaders
-        train_dataset = MethylationDataset(X_train, y_train)
+        # Loading a Saved Model and test again.
+        predictor = cls.load_model(cls.model_path)
+        predictor.test(test_df)
+
+        # --------------------
+
+
+
+
+
         val_dataset = MethylationDataset(X_val, y_val)
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
@@ -157,5 +241,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         predictor.save_model(predictor.model_path)
 
 
+
+
 if __name__ == "__main__":
-    DeepMAgePredictor.training_pipeline()
+    DeepMAgePredictor.train_pipeline()

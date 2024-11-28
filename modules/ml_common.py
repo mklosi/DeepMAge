@@ -11,10 +11,16 @@ print(f"torch.backends.mps.is_available(): {torch.backends.mps.is_available()}")
 
 
 class MethylationDataset(Dataset):
-    """Dataset class for DNA methylation data."""
-    def __init__(self, features, ages, is_training=True):
+    def __init__(self, df, is_training=True):
+
+
+
+
         self.features = features
         self.ages = ages
+
+
+
         self.is_training = is_training
 
     def __len__(self):
@@ -29,45 +35,46 @@ class MethylationDataset(Dataset):
         return sample
 
 
-class DeepMAgeBase:
+class DeepMAgeBase: # &&& do we even need this?
+    pass
 
-    @classmethod
-    def load_model(cls, model_path):
-        raise NotImplementedError()
-
-    @classmethod
-    def new_model(cls):
-        return cls()
-
-    def save_model(self, save_path):
-        raise NotImplementedError()
-
-    @staticmethod
-    def load_data(file_path):
-        raise NotImplementedError()
-
-    def prepare_features(self, df, is_training):
-        raise NotImplementedError()
-
-    @staticmethod
-    def split_data(features, ages, test_size=0.2):
-        raise NotImplementedError()
-
-    def train(self, train_loader, val_loader, epochs):
-        raise NotImplementedError()
-
-    def train_with_cross_validation(self, data, folds):
-        raise NotImplementedError()
-
-    def validate(self, val_loader):
-        raise NotImplementedError()
-
-    def test(self, test_loader):
-        raise NotImplementedError()
-
-    def predict_batch(self, features):
-        raise NotImplementedError()
-
-    @classmethod
-    def training_pipeline(cls):
-        raise NotImplementedError()
+    # @classmethod
+    # def load_model(cls, model_path):
+    #     raise NotImplementedError()
+    #
+    # @classmethod
+    # def new_model(cls):
+    #     raise NotImplementedError()
+    #
+    # def save_model(self, save_path):
+    #     raise NotImplementedError()
+    #
+    # @staticmethod
+    # def load_data(file_path):
+    #     raise NotImplementedError()
+    #
+    # def prepare_features(self, df, is_training):
+    #     raise NotImplementedError()
+    #
+    # @staticmethod
+    # def split_data(features, ages, test_size=0.2):
+    #     raise NotImplementedError()
+    #
+    # def train(self, train_loader, val_loader, epochs):
+    #     raise NotImplementedError()
+    #
+    # def train_with_cross_validation(self, data, folds):
+    #     raise NotImplementedError()
+    #
+    # def validate(self, val_loader):
+    #     raise NotImplementedError()
+    #
+    # def test(self, test_loader):
+    #     raise NotImplementedError()
+    #
+    # def predict_batch(self, features):
+    #     raise NotImplementedError()
+    #
+    # @classmethod
+    # def training_pipeline(cls):
+    #     raise NotImplementedError()
