@@ -21,10 +21,10 @@ class MethylationDataset(Dataset):
 
     def __getitem__(self, idx):
         sample = {
-            "features": torch.tensor(self.features[idx], dtype=torch.float32)
+            "features": torch.tensor(self.features.values[idx], dtype=torch.float32)
         }
         if self.is_training:
-            sample["age"] = torch.tensor(self.ages[idx], dtype=torch.float32)
+            sample["age"] = torch.tensor(self.ages.values[idx], dtype=torch.float32)
         return sample
 
 

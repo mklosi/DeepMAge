@@ -85,7 +85,8 @@ class DeepMAgePredictor(DeepMAgeBase):
         self.imputer = SimpleImputer(strategy='median')
         self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))  #$ hyper
         self.input_dim = 1000
-        self.batch_size = 32
+        self.epochs = 200
+        self.batch_size = 16
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else
             "mps" if torch.backends.mps.is_available()
@@ -100,7 +101,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         }
         self.loss_str = "mae"
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=1e-4)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.000001)
 
     @classmethod
     def load_model(cls, save_path):
@@ -218,13 +219,8 @@ class DeepMAgePredictor(DeepMAgeBase):
         # min_max_df = min_max_df.sort_values(by='cpg_site_id').reset_index(drop=True)
 
         metadata_df, methyl_df = self.split_df(df)
-        features = methyl_df.values
-
-        # &&& metadata_df could be null during prediction???
-        # &&& do we need to scale age?
-        ages = metadata_df[self.age_col_str].values if self.age_col_str in metadata_df.columns else None
-
-        return features, ages
+        age_ser = metadata_df[self.age_col_str] if self.age_col_str in metadata_df.columns else None
+        return methyl_df, age_ser
 
     @staticmethod
     def split_data_by_type(df):
@@ -240,8 +236,6 @@ class DeepMAgePredictor(DeepMAgeBase):
         print("Training model...")
         train_dt = datetime.now()
 
-        epochs = 2  #$ hyper. init: 100
-
         train_data, val_data = self.split_data_by_percent(train_df)
 
         features_train, ages_train = self.prepare_features(train_data, is_training=True) # &&& need to play with these more.
@@ -253,12 +247,12 @@ class DeepMAgePredictor(DeepMAgeBase):
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
 
-        for epoch in range(epochs):
-            print(f"--- Epoch '{epoch + 1}/{epochs}' --------------------")
+        for epoch in range(self.epochs):
+            # print(f"--- Epoch '{epoch + 1}/{epochs}' --------------------")
             self.model.train()
             epoch_loss = 0
             for i, batch in enumerate(train_loader):
-                print(f"Processing batch: {i+1}/{len(train_loader)}")
+                # print(f"Processing batch: {i+1}/{len(train_loader)}")
 
                 features = batch["features"].to(self.device)
                 ages = batch["age"].to(self.device)
@@ -271,7 +265,7 @@ class DeepMAgePredictor(DeepMAgeBase):
                 epoch_loss += loss.item()
 
             val_loss = self.validate(val_loader)
-            print(f"Epoch '{epoch+1}/{epochs}', Training Loss: {epoch_loss / len(train_loader)}, Validation Loss: {val_loss}")
+            print(f"Epoch '{epoch+1}/{self.epochs}', Training Loss: {epoch_loss / len(train_loader)}, Validation Loss: {val_loss}")
 
         mem.log_memory(print, "train")
         print(f"train runtime: {datetime.now() - train_dt}")
@@ -323,18 +317,22 @@ class DeepMAgePredictor(DeepMAgeBase):
         return metric_results
 
     def predict_batch(self, new_df, ref_df):
+        print("Batch predicting...")
 
         df = pd.concat([ref_df, new_df])
 
         # Add a single-value gse_id as a column, so we can easily run normalization.
         df["gse_id"] = "dummy-gse-id"
 
-        features, _ = self.prepare_features(df, is_training=False)
-        dataset = MethylationDataset(features, None, is_training=False)
+        # Preserve gsm_id for filtering and output.
+        gsm_ids = new_df.index.tolist()
+
+        features_df, _ = self.prepare_features(df, is_training=False)
+        features_df = features_df[features_df.index.isin(gsm_ids)]
+        dataset = MethylationDataset(features_df, None, is_training=False)
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
 
         predictions = []
-        gsm_ids = new_df.index.tolist()  # Preserve gsm_id for output
 
         self.model.eval()
         with torch.no_grad():
@@ -343,10 +341,9 @@ class DeepMAgePredictor(DeepMAgeBase):
                 batch_predictions = self.model(features).squeeze()
                 predictions.extend(batch_predictions.cpu().numpy())
 
-        # Format predictions into a DataFrame for easier usage
         predictions_df = pd.DataFrame({
             "gsm_id": gsm_ids,
-            "predicted_age": predictions
+            "predicted_age_years": predictions
         }).set_index("gsm_id")
 
         return predictions_df
@@ -378,23 +375,26 @@ class DeepMAgePredictor(DeepMAgeBase):
         # _, methyl_df = DeepMAgePredictor.split_df(new_data)
         #
         # # Rename the index, so it's more like actual new data.
-        # methyl_df.index = [f"sample_{i}" for i in range(batch_sample_count)]
+        # # methyl_df.index = [f"sample_{i}" for i in range(batch_sample_count)]
+        # methyl_df.index = [f"{gsm_id}_" for gsm_id in methyl_df.index]
         #
         # # Get reference df, so we can impute and normalize the new data (big source of contention conceptually).
         # _, ref_df = DeepMAgePredictor.split_df(df)
         #
-        # # &&&
-        # global breakpointer
-        # breakpointer = True
+        # # # &&&
+        # # global breakpointer
+        # # breakpointer = True
         #
-        # predictions = predictor.predict_batch(methyl_df, ref_df)
-        # print(f"Predictions for new data:\n{predictions}")
-
-
-
-
-        fdjkfd = 1
-
+        # prediction_df = predictor.predict_batch(methyl_df, ref_df)
+        #
+        # # Quick sanity check with ages from actual metadata.
+        # metadata_df, _ = DeepMAgePredictor.split_df(df)
+        # actual_age_df = metadata_df[[DeepMAgePredictor.age_col_str]]
+        # predicted_age_df = prediction_df
+        # predicted_age_df.index = [gsm_id[:-1] for gsm_id in predicted_age_df.index]
+        #
+        # prediction_df = actual_age_df.join(predicted_age_df, how="inner")
+        # print(f"Predictions for new data:\n{prediction_df}")
 
 
 if __name__ == "__main__":
