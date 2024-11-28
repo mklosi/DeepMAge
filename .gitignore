@@ -3,6 +3,7 @@
 .idea/
 /*.iml
 __pycache__
+model_artifacts
 resources
 resources_methylprep
 states
