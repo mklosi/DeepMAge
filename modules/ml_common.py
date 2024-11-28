@@ -22,7 +22,7 @@ class MethylationDataset(Dataset):
         sample = {
             "features": torch.tensor(self.features.values[idx], dtype=torch.float32)
         }
-        if self.ages:
+        if self.ages is not None:
             sample["age"] = torch.tensor(self.ages.values[idx], dtype=torch.float32)
         return sample
 

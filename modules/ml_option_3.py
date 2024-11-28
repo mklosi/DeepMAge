@@ -85,8 +85,10 @@ class DeepMAgePredictor(DeepMAgeBase):
         self.imputer = SimpleImputer(strategy='median')
         self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))  #$ hyper
         self.input_dim = 1000
-        self.epochs = 2
+        self.epochs = 200
         self.batch_size = 32
+        self.early_stop_patience = 10
+        self.early_stop_min_delta = 0.001
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else
             "mps" if torch.backends.mps.is_available()
@@ -99,9 +101,9 @@ class DeepMAgePredictor(DeepMAgeBase):
             "mae": nn.L1Loss(),  # Computes Mean Absolute Error (MAE)
             "medae": MedAELoss(),  # Computes Median Absolute Error (MedAE)
         }
-        self.loss_str = "mae"
+        self.loss_str = "medae"
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.00001)
 
     @classmethod
     def load_model(cls, save_path):
@@ -245,6 +247,9 @@ class DeepMAgePredictor(DeepMAgeBase):
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
 
+        best_val_loss = float('inf')  # Initialize to a large value
+        epochs_no_improve = 0  # Counter for early stopping
+
         for epoch in range(self.epochs):
             # print(f"--- Epoch '{epoch + 1}/{epochs}' --------------------")
             self.model.train()
@@ -264,6 +269,17 @@ class DeepMAgePredictor(DeepMAgeBase):
 
             val_loss = self.validate(val_loader)
             print(f"Epoch '{epoch+1}/{self.epochs}', Training Loss: {epoch_loss / len(train_loader)}, Validation Loss: {val_loss}")
+
+            # Early stopping logic
+            if val_loss < best_val_loss - self.early_stop_min_delta:
+                best_val_loss = val_loss
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+
+            if epochs_no_improve >= self.early_stop_patience:
+                print(f"Early stopping triggered. No improvement for '{self.early_stop_patience}' epochs.")
+                break
 
         mem.log_memory(print, "train")
         print(f"train runtime: {datetime.now() - train_dt}")
@@ -364,34 +380,34 @@ class DeepMAgePredictor(DeepMAgeBase):
         test_df = test_df.sample(frac=1, random_state=24)
         _ = predictor.test_(test_df)
 
-        ## Make a prediction
-
-        # Take the first 3 samples from test_df as new data
-        batch_sample_count = 3
-        new_data = test_df.head(batch_sample_count)
-        _, methyl_df = DeepMAgePredictor.split_df(new_data)
-
-        # Rename the index, so it's more like actual new data.
-        # methyl_df.index = [f"sample_{i}" for i in range(batch_sample_count)]
-        methyl_df.index = [f"{gsm_id}_" for gsm_id in methyl_df.index]
-
-        # Get reference df, so we can impute and normalize the new data (big source of contention conceptually).
-        _, ref_df = DeepMAgePredictor.split_df(df)
-
-        # # &&&
-        # global breakpointer
-        # breakpointer = True
-
-        prediction_df = predictor.predict_batch(methyl_df, ref_df)
-
-        # Quick sanity check with ages from actual metadata.
-        metadata_df, _ = DeepMAgePredictor.split_df(df)
-        actual_age_df = metadata_df[[DeepMAgePredictor.age_col_str]]
-        predicted_age_df = prediction_df
-        predicted_age_df.index = [gsm_id[:-1] for gsm_id in predicted_age_df.index]
-
-        prediction_df = actual_age_df.join(predicted_age_df, how="inner")
-        print(f"Predictions for new data:\n{prediction_df}")
+        # ## Make a prediction
+        #
+        # # Take the first 3 samples from test_df as new data
+        # batch_sample_count = 3
+        # new_data = test_df.head(batch_sample_count)
+        # _, methyl_df = DeepMAgePredictor.split_df(new_data)
+        #
+        # # Rename the index, so it's more like actual new data.
+        # # methyl_df.index = [f"sample_{i}" for i in range(batch_sample_count)]
+        # methyl_df.index = [f"{gsm_id}_" for gsm_id in methyl_df.index]
+        #
+        # # Get reference df, so we can impute and normalize the new data (big source of contention conceptually).
+        # _, ref_df = DeepMAgePredictor.split_df(df)
+        #
+        # # # &&&
+        # # global breakpointer
+        # # breakpointer = True
+        #
+        # prediction_df = predictor.predict_batch(methyl_df, ref_df)
+        #
+        # # Quick sanity check with ages from actual metadata.
+        # metadata_df, _ = DeepMAgePredictor.split_df(df)
+        # actual_age_df = metadata_df[[DeepMAgePredictor.age_col_str]]
+        # predicted_age_df = prediction_df
+        # predicted_age_df.index = [gsm_id[:-1] for gsm_id in predicted_age_df.index]
+        #
+        # prediction_df = actual_age_df.join(predicted_age_df, how="inner")
+        # print(f"Predictions for new data:\n{prediction_df}")
 
 
 if __name__ == "__main__":
