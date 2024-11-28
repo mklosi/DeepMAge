@@ -1,12 +1,25 @@
+from collections import defaultdict
+
+import joblib
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import KFold, train_test_split
 import pandas as pd
 
-from modules.metadata import metadata_parquet_path
+from modules.memory import Memory
 from modules.ml_common import DeepMAgeBase, MethylationDataset, DataLoader
 from datetime import datetime
+
+mem = Memory(noop=False)
+
+pd.set_option('display.max_columns', 8)
+pd.set_option('display.min_rows', 20)
+pd.set_option('display.max_rows', 20)
+pd.set_option('display.max_colwidth', None)
+pd.set_option('display.width', None)
 
 
 class DeepMAgeModel(nn.Module):
@@ -33,9 +46,20 @@ class DeepMAgeModel(nn.Module):
         return x
 
 
+class MedAELoss(nn.Module):
+    def __init__(self):
+        super(MedAELoss, self).__init__()
+
+    # noinspection PyMethodMayBeStatic
+    def forward(self, predictions, targets):
+        absolute_errors = torch.abs(predictions - targets)
+        medae = torch.median(absolute_errors)
+        return medae
+
+
 class DeepMAgePredictor(DeepMAgeBase):
 
-    model_path = "model_artifacts/model_option_3.pkl"
+    model_path = "model_artifacts/model_option_3.predictor"
     metadata_df_path = "resources/metadata_derived.parquet"
     methyl_df_path = "resources/methylation_data.parquet"
 
@@ -43,24 +67,32 @@ class DeepMAgePredictor(DeepMAgeBase):
     metadata_cols_of_interest = ["gse_id", "type", age_col_str] # &&& can I be reminded of the benefit of doing cls vs. self?
 
     def __init__(self):
+        self.imputer = SimpleImputer(strategy='median')
+        self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))  #$ hyper
         self.input_dim = 1000
-        self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))
+        self.batch_size = 32
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else
             "mps" if torch.backends.mps.is_available()
             else "cpu"
         )
         self.model = DeepMAgeModel(input_dim=self.input_dim).to(self.device)
-        self.criterion = nn.MSELoss()  # &&& use MAE. MAE aligns better with the metrics mentioned in the paper (MedAE and MAE).
+
+        self.criterions = {
+            "mse": nn.MSELoss(),
+            "mae": nn.L1Loss(),  # Computes Mean Absolute Error (MAE)
+            "medae": MedAELoss(),  # Computes Median Absolute Error (MedAE)
+        }
+        self.loss_str = "mae"
+
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-4)
 
     @classmethod
-    def load_model(cls, model_path):
-        """Load a saved DeepMAge model."""
-        instance = cls()
-        instance.model.load_state_dict(torch.load(model_path, map_location=instance.device))
-        instance.model.eval()
-        print(f"Model loaded from: {model_path}")
+    def load_model(cls, save_path):
+        """Load the entire DeepMAgePredictor object."""
+        with open(save_path, 'rb') as f:
+            instance = joblib.load(f)
+        print(f"'{cls.__name__}' loaded from: {save_path}")
         return instance
 
     @classmethod
@@ -68,9 +100,10 @@ class DeepMAgePredictor(DeepMAgeBase):
         return cls()
 
     def save_model(self, save_path):
-        """Save the trained model."""
-        torch.save(self.model.state_dict(), save_path)
-        print(f"Model saved to: {save_path}")
+        """Save the entire DeepMAgePredictor object."""
+        with open(save_path, 'wb') as f:
+            joblib.dump(self, f)
+        print(f"'{self.__class__.__name__}' saved to: {save_path}")
 
     @classmethod
     def join_dfs(cls, metadata_df, methyl_df):
@@ -91,7 +124,6 @@ class DeepMAgePredictor(DeepMAgeBase):
 
     @classmethod
     def load_data(cls):
-        """&&& docs"""
         metadata_df = pd.read_parquet(cls.metadata_df_path)
         methyl_df = pd.read_parquet(cls.methyl_df_path)
 
@@ -109,10 +141,14 @@ class DeepMAgePredictor(DeepMAgeBase):
         nan_cpg_sites = df.apply(lambda row: ','.join(row.index[row.isna()]), axis=1)
         gsm_ids_with_nans_df = pd.DataFrame({
             'gsm_id': gsm_ids_with_nans.index,
+            'gse_id': df.loc[gsm_ids_with_nans.index, 'gse_id'].values,
+            'type': df.loc[gsm_ids_with_nans.index, 'type'].values,
             'nan_count': gsm_ids_with_nans.values,
             'cpg_sites_with_nan': nan_cpg_sites[gsm_ids_with_nans.index].values
         })
+        gsm_ids_with_nans_sorted_df = gsm_ids_with_nans_df.sort_values(by="nan_count", ascending=False)
 
+        # &&&
         ## Show which cpg site ids have missing values and the corresponding gsm_ids that contain those nans.
         nan_counts_per_cpg = df.isna().sum(axis=0)
         cpg_sites_with_nans = nan_counts_per_cpg[nan_counts_per_cpg > 0]
@@ -122,69 +158,110 @@ class DeepMAgePredictor(DeepMAgeBase):
             'nan_count': cpg_sites_with_nans.values,
             'gsm_ids_with_nan': nan_gsm_ids_per_cpg[cpg_sites_with_nans.index].values
         })
-
-
-
+        cpg_sites_with_nans_sorted_df = cpg_sites_with_nans_df.sort_values(by="nan_count", ascending=False)
 
         return df
 
-    def prepare_features(self, df, is_training=True):
+    def normalize_group(self, df):
+        metadata_df, methyl_df = self.split_df(df)
+        methyl_df = pd.DataFrame(self.scaler.fit_transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns)
+        df = self.join_dfs(metadata_df, methyl_df)
+        return df
+
+    def prepare_features(self, df, is_training=True): # &&& this is correctly named.
+
+        ## Remove samples with more than X nan values across all cpg sites.
+        nan_counts = df.isna().sum(axis=1)  # Count NaNs per GSM ID
+        ten_perc = self.input_dim // 10 #$ hyper (and all others...)
+        gsm_ids_with_nans = nan_counts[nan_counts > ten_perc].index
+        df = df[~df.index.isin(gsm_ids_with_nans)]
 
         metadata_df, methyl_df = self.split_df(df)
-        features = methyl_df.drop(columns=[self.age_col_str]).values
 
-
-
-
+        ## impute #$ docs
         if is_training:
-            features = self.scaler.fit_transform(features)
+            methyl_df = pd.DataFrame(self.imputer.fit_transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns)
         else:
-            features = self.scaler.transform(features)
+            methyl_df = pd.DataFrame(self.imputer.transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns)
 
+        ## normalize #$ docs
+        df = self.join_dfs(metadata_df, methyl_df)
 
+        # # filter
+        # df = df[df["gse_id"] == "GSE84624"]
 
+        df = df.groupby('gse_id', group_keys=False).apply(self.normalize_group)
 
-        ages = df["age"].values if "age" in df.columns else None
+        # # checker
+        # min_max_df = (
+        #     methyl_df
+        #     .agg(['min', 'max'])  # Compute min and max for each column
+        #     .T  # Transpose for a tabular structure
+        #     .reset_index()  # Convert index to column
+        # )
+        # min_max_df.columns = ['cpg_site_id', 'min_value', 'max_value']
+        # min_max_df = min_max_df.sort_values(by='cpg_site_id').reset_index(drop=True)
+
+        metadata_df, methyl_df = self.split_df(df)
+        features = methyl_df.values
+
+        # &&& metadata_df could be null during prediction???
+        # &&& do we need to scale age?
+        ages = metadata_df[self.age_col_str].values if self.age_col_str in metadata_df.columns else None
+
         return features, ages
 
     @staticmethod
-    def split_data(df):
+    def split_data_by_type(df):
         train_df = df[df["type"] == "train"]
         test_df = df[df["type"] == "verification"]
         return train_df, test_df
 
+    @staticmethod
+    def split_data_by_percent(df):
+        return train_test_split(df, test_size=0.2, random_state=42)
+
     def train(self, train_df):
+        print("Training model...")
+        train_dt = datetime.now()
 
+        epochs = 2  #$ hyper. init: 100
 
+        train_data, val_data = self.split_data_by_percent(train_df)
 
+        features_train, ages_train = self.prepare_features(train_data, is_training=True) # &&& need to play with these more.
+        features_val, ages_val = self.prepare_features(val_data, is_training=False)
 
-        self.prepare_features(train_df, is_training=True)
+        train_dataset = MethylationDataset(features_train, ages_train, is_training=True)
+        val_dataset = MethylationDataset(features_val, ages_val, is_training=True)
 
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
 
-        train_dataset = MethylationDataset(train_df)
-
-
-
-        self.model.train()
         for epoch in range(epochs):
+            print(f"--- Epoch '{epoch + 1}/{epochs}' --------------------")
+            self.model.train()
             epoch_loss = 0
-            for batch in train_loader:
+            for i, batch in enumerate(train_loader):
+                print(f"Processing batch: {i+1}/{len(train_loader)}")
+
                 features = batch["features"].to(self.device)
                 ages = batch["age"].to(self.device)
 
                 self.optimizer.zero_grad()
                 predictions = self.model(features).squeeze()
-                loss = self.criterion(predictions, ages)
+                loss = self.criterions[self.loss_str](predictions, ages)
                 loss.backward()
                 self.optimizer.step()
-
                 epoch_loss += loss.item()
 
             val_loss = self.validate(val_loader)
-            print(f"Epoch {epoch+1}/{epochs}, Training Loss: {epoch_loss / len(train_loader)}, Validation Loss: {val_loss}")
+            print(f"Epoch '{epoch+1}/{epochs}', Training Loss: {epoch_loss / len(train_loader)}, Validation Loss: {val_loss}")
+
+        mem.log_memory(print, "train")
+        print(f"train runtime: {datetime.now() - train_dt}")
 
     def validate(self, val_loader):
-        """Evaluate the model on a test/validation set."""
         self.model.eval()
         total_loss = 0
         with torch.no_grad():
@@ -192,15 +269,49 @@ class DeepMAgePredictor(DeepMAgeBase):
                 features = batch["features"].to(self.device)
                 ages = batch["age"].to(self.device)
                 predictions = self.model(features).squeeze()
-                loss = self.criterion(predictions, ages)
+                loss = self.criterions[self.loss_str](predictions, ages)
                 total_loss += loss.item()
-        return total_loss / len(val_loader)
+        val_loss = total_loss / len(val_loader)
+        return val_loss
 
-    def test(self, test_loader):
-        pass
+    def test(self, test_df):
+        print("Testing model...")
+
+        # &&& play with these. possible rename for one/more of theis_training.
+        features_test, ages_test = self.prepare_features(test_df, is_training=False)
+        test_dataset = MethylationDataset(features_test, ages_test, is_training=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
+
+        metric_results = {}
+        actual_ages_all = []
+        predictions_all = []
+
+        self.model.eval()
+        with torch.no_grad():
+            for batch in test_loader:
+                features = batch["features"].to(self.device)
+                predictions = self.model(features).squeeze()
+                ages = batch["age"].to(self.device)
+
+                predictions_all.extend(predictions.cpu())
+                actual_ages_all.extend(ages.cpu())
+
+            predictions_all = torch.tensor(predictions_all)
+            actual_ages_all = torch.tensor(actual_ages_all)
+
+            for name, criterion in self.criterions.items():
+                metric_results[name] = criterion(predictions_all, actual_ages_all).item()
+
+        for name, value in metric_results.items():
+            print(f"Test '{name}': {value}")
+
+        return metric_results
 
     def predict_batch(self, features):
         """Predict ages for a batch of features."""
+
+        # &&& where is call to prepare_features?
+
         self.model.eval()
         features = torch.tensor(features, dtype=torch.float32).to(self.device)
         with torch.no_grad():
@@ -215,32 +326,14 @@ class DeepMAgePredictor(DeepMAgeBase):
         df = predictor.load_data()
 
         # Regular train on a single fold, test, and save a model.
-        train_df, test_df = predictor.split_data(df)
+        train_df, test_df = predictor.split_data_by_type(df)
         predictor.train(train_df)
-        predictor.test(test_df)
+        _ = predictor.test(test_df)
         predictor.save_model(cls.model_path)
 
         # Loading a Saved Model and test again.
         predictor = cls.load_model(cls.model_path)
-        predictor.test(test_df)
-
-        # --------------------
-
-
-
-
-
-        val_dataset = MethylationDataset(X_val, y_val)
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-
-        # Train the model
-        predictor.train(train_loader, val_loader, epochs=50)
-
-        # Save the model
-        predictor.save_model(predictor.model_path)
-
-
+        _ = predictor.test(test_df)
 
 
 if __name__ == "__main__":
