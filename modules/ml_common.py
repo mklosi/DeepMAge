@@ -11,10 +11,9 @@ print(f"torch.backends.mps.is_available(): {torch.backends.mps.is_available()}")
 
 
 class MethylationDataset(Dataset):
-    def __init__(self, features, ages, is_training=True):  # &&& is this correctly named? &&& do we even need it. we can just say `if self.ages...
+    def __init__(self, features, ages):
         self.features = features
         self.ages = ages
-        self.is_training = is_training
 
     def __len__(self):
         return len(self.features)
@@ -23,7 +22,7 @@ class MethylationDataset(Dataset):
         sample = {
             "features": torch.tensor(self.features.values[idx], dtype=torch.float32)
         }
-        if self.is_training:
+        if self.ages:
             sample["age"] = torch.tensor(self.ages.values[idx], dtype=torch.float32)
         return sample
 
