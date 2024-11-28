@@ -1,5 +1,5 @@
 from collections import defaultdict
-
+import random
 import joblib
 import torch
 import torch.nn as nn
@@ -7,6 +7,7 @@ import torch.optim as optim
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import KFold, train_test_split
+import numpy as np
 import pandas as pd
 
 from modules.memory import Memory
@@ -20,6 +21,17 @@ pd.set_option('display.min_rows', 20)
 pd.set_option('display.max_rows', 20)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', None)
+
+
+def set_seeds(seed=42):
+    # random.seed(seed)
+    # np.random.seed(seed)
+    torch.manual_seed(seed)  # Only this one actually matters (empirically), but leaving the others for reference.
+    # if torch.cuda.is_available():
+    #     torch.cuda.manual_seed_all(seed)
+
+
+set_seeds()
 
 
 class DeepMAgeModel(nn.Module):
@@ -274,7 +286,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         val_loss = total_loss / len(val_loader)
         return val_loss
 
-    def test(self, test_df):
+    def test_(self, test_df): # &&& rename after.
         print("Testing model...")
 
         # &&& play with these. possible rename for one/more of theis_training.
@@ -307,16 +319,30 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         return metric_results
 
-    def predict_batch(self, features):
-        """Predict ages for a batch of features."""
-
-        # &&& where is call to prepare_features?
+    def predict_batch(self, new_data):
 
         self.model.eval()
-        features = torch.tensor(features, dtype=torch.float32).to(self.device)
+
+        features, _ = self.prepare_features(new_data, is_training=False)
+        dataset = MethylationDataset(features, None, is_training=False)
+        loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
+
+        predictions = []
+        gsm_ids = new_data.index.tolist()  # Preserve gsm_id for output
+
         with torch.no_grad():
-            predictions = self.model(features).cpu().numpy()
-        return predictions
+            for batch in loader:
+                features = batch["features"].to(self.device)
+                batch_predictions = self.model(features).squeeze()
+                predictions.extend(batch_predictions.cpu().numpy())
+
+        # Format predictions into a DataFrame for easier usage
+        predictions_df = pd.DataFrame({
+            "gsm_id": gsm_ids,
+            "predicted_age": predictions
+        }).set_index("gsm_id")
+
+        return predictions_df
 
     @classmethod
     def train_pipeline(cls):
@@ -324,16 +350,31 @@ class DeepMAgePredictor(DeepMAgeBase):
         predictor = cls.new_model()
 
         df = predictor.load_data()
+        train_df, test_df = predictor.split_data_by_type(df)
 
         # Regular train on a single fold, test, and save a model.
-        train_df, test_df = predictor.split_data_by_type(df)
         predictor.train(train_df)
-        _ = predictor.test(test_df)
+        _ = predictor.test_(test_df)
         predictor.save_model(cls.model_path)
 
         # Loading a Saved Model and test again.
         predictor = cls.load_model(cls.model_path)
-        _ = predictor.test(test_df)
+        # test_df = test_df.sample(frac=1, random_state=43)
+        _ = predictor.test_(test_df)
+
+        # ## Make a prediction
+        #
+        # # Take the first 3 samples from test_df as new data
+        # new_data = test_df.head(3)
+        # _, methyl_df = DeepMAgePredictor.split_df(new_data)
+        # predictions = predictor.predict_batch(methyl_df)
+        # print(f"Predictions for new data:\n{predictions}")
+
+
+
+
+        fdjkfd = 1
+
 
 
 if __name__ == "__main__":
