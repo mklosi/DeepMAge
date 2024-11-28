@@ -16,18 +16,19 @@ if __name__ == '__main__':
     mem.log_memory(print, "before____")
 
     # path = "resources/metadata.parquet"
-    path = "resources/methylation_data.parquet"
+    path = "resources/metadata_derived.parquet"
+    # path = "resources/methylation_data.parquet"
     # path = "resources/GSE125105_RAW_few/beta_values.parquet"
     # path = "resources/GSE125105_RAW_few/control_probes.parquet"
     # path = "resources/GSE125105_RAW_few/m_values.parquet"
     # path = "resources/GSE125105_RAW_few/noob_meth_values.parquet"
     # path = "resources/GSE125105_RAW_few/noob_unmeth_values.parquet"
     # path = "resources/GSE125105_RAW_few/sample_sheet_meta_data.parquet"
-    path = "resources_methylprep/GSE102177_download_pandas_1.3.5/GPL13534/beta_values.pkl"
+    # path = "resources_methylprep/GSE102177_download_pandas_1.3.5/GPL13534/beta_values.pkl"
     # path = "resources_methylprep/GSE102177_download_pandas_1.3.5/GPL13534/GSE102177_GPL13534_meta_data.pkl"
 
-    # df = pd.read_parquet(path)
-    df = pd.read_pickle(path)
+    df = pd.read_parquet(path)
+    # df = pd.read_pickle(path)
 
     # ## get sample_id_to_gsm_id
     # sample_id_to_gsm_id = df.set_index("Sample_ID")["GSM_ID"].to_dict()
