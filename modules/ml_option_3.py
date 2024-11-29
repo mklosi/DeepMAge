@@ -39,15 +39,16 @@ set_seeds()
 
 class DeepMAgeModel(nn.Module):
     """Deep neural network for age prediction."""
-    def __init__(self, input_dim):
+    def __init__(self, config):
         super(DeepMAgeModel, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 512)
-        self.fc2 = nn.Linear(512, 512)
-        self.fc3 = nn.Linear(512, 256)
-        self.fc4 = nn.Linear(256, 128)
-        self.fc5 = nn.Linear(128, 1)
-        self.dropout = nn.Dropout(0.3)
-        self.activation_func = nn.ELU()
+        self.config = config
+        self.fc1 = nn.Linear(self.config["input_dim"], self.config["layer2_in"])
+        self.fc2 = nn.Linear(self.config["layer2_in"], self.config["layer3_in"])
+        self.fc3 = nn.Linear(self.config["layer3_in"], self.config["layer4_in"])
+        self.fc4 = nn.Linear(self.config["layer4_in"], self.config["layer5_in"])
+        self.fc5 = nn.Linear(self.config["layer5_in"], 1)
+        self.dropout = nn.Dropout(self.config["dropout"])
+        self.activation_func = self.config["activation_func"]
 
     def forward(self, x):
         x = self.activation_func(self.fc1(x))
@@ -81,38 +82,22 @@ class DeepMAgePredictor(DeepMAgeBase):
     age_col_str = "actual_age_years"
     metadata_cols = ["gse_id", "type", age_col_str] # &&& can I be reminded of the benefit of doing cls vs. self?
 
-    def __init__(self):
-        self.imputer = SimpleImputer(strategy='median')
-        self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))
-        self.input_dim = 1000
-        # self.epochs = 2
-        self.max_epochs = 9999
-        self.batch_size = 32
-
-        # lr = 0.0001
-        self.lr_init = 0.0001
-        self.lr_factor = 0.1
-        self.lr_patience = 10
-        self.lr_threshold = 0.001  # Bigger values make lr change faster.
-        self.early_stop_patience = 20
-        self.early_stop_threshold = 0.0001  # Bigger values make early stopping hit faster.
-
+    def __init__(self, config):
+        self.config = config
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else
             "mps" if torch.backends.mps.is_available()
             else "cpu"
         )
-        self.model = DeepMAgeModel(input_dim=self.input_dim).to(self.device)
-
+        self.imputer = SimpleImputer(strategy=self.config["imputation_strategy"])
+        self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))
+        self.model = config["model"]["model_class"](config=self.config["model"]).to(self.device)
         self.criterions = {
             "mse": nn.MSELoss(),
             "mae": nn.L1Loss(),  # Computes Mean Absolute Error (MAE)
             "medae": MedAELoss(),  # Computes Median Absolute Error (MedAE)
         }
-        # self.loss_str = "mae"
-        self.loss_name = "medae"
-
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr_init)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.config["lr_init"])
 
     @classmethod
     def load_model(cls, save_path):
@@ -126,8 +111,8 @@ class DeepMAgePredictor(DeepMAgeBase):
         return instance
 
     @classmethod
-    def new_model(cls):
-        return cls()
+    def new_model(cls, config):
+        return cls(config)
 
     def save_model(self, save_path):
         """Save the entire DeepMAgePredictor object."""
@@ -203,9 +188,9 @@ class DeepMAgePredictor(DeepMAgeBase):
 
     def prepare_features(self, df, is_training=True):
 
-        ## Remove samples with more than X nan values across all cpg sites.
+        ## Remove samples with more than X perc nan values across all cpg sites.
         nan_counts = df.isna().sum(axis=1)  # Count NaNs per GSM ID
-        ten_perc = self.input_dim // 10 #$ hyper (and all others...)
+        ten_perc = self.config["model"]["input_dim"] // self.config["remove_nan_samples_perc"]
         gsm_ids_with_nans = nan_counts[nan_counts > ten_perc].index
         df = df[~df.index.isin(gsm_ids_with_nans)]
 
@@ -245,12 +230,11 @@ class DeepMAgePredictor(DeepMAgeBase):
         test_df = df[df["type"] == "verification"]
         return train_df, test_df
 
-    @staticmethod
-    def split_data_by_percent(df):
-        return train_test_split(df, test_size=0.2, random_state=42)
+    def split_data_by_percent(self, df):
+        return train_test_split(df, test_size=self.config["test_ratio"], random_state=42)
 
     def train(self, train_df):
-        print(f"Loss is '{self.loss_name}'. Training model...")
+        print(f"Loss is '{self.config['loss_name']}'. Training model...")
         train_dt = datetime.now()
 
         train_data, val_data = self.split_data_by_percent(train_df)
@@ -261,22 +245,22 @@ class DeepMAgePredictor(DeepMAgeBase):
         train_dataset = MethylationDataset(features_train, ages_train)
         val_dataset = MethylationDataset(features_val, ages_val)
 
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=self.config["batch_size"], shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=self.config["batch_size"], shuffle=False)
 
         # Learning rate scheduler
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer,
-            factor=self.lr_factor,
-            patience=self.lr_patience,
-            threshold=self.lr_threshold,  # Matches the minimum delta for improvement
+            factor=self.config["lr_factor"],
+            patience=self.config["lr_patience"],
+            threshold=self.config["lr_threshold"],  # Matches the minimum delta for improvement
         )
 
         # Early stopper
         best_loss = float('inf')
         patience_counter = 0
 
-        for epoch in range(self.max_epochs):
+        for epoch in range(self.config["max_epochs"]):
             # print(f"--- Epoch '{epoch + 1}/{epochs}' --------------------")
             self.model.train()
             epoch_loss = 0
@@ -290,14 +274,14 @@ class DeepMAgePredictor(DeepMAgeBase):
 
                 self.optimizer.zero_grad()
                 predictions = self.model(features).squeeze()
-                loss = self.criterions[self.loss_name](predictions, ages)
+                loss = self.criterions[self.config["loss_name"]](predictions, ages)
                 loss.backward()
                 self.optimizer.step()
                 epoch_loss += loss.item()
 
             val_loss = self.validate(val_loader)
             print(
-                f"Epoch '{epoch+1}/{self.max_epochs}', "
+                f"Epoch '{epoch+1}/{self.config['max_epochs']}', "
                 f"lr: '{round(lr_scheduler.get_last_lr()[0], 10)}', "
                 f"Training Loss: {epoch_loss / len(train_loader)}, "
                 f"Validation Loss: {val_loss}"
@@ -307,13 +291,13 @@ class DeepMAgePredictor(DeepMAgeBase):
             lr_scheduler.step(val_loss)
 
             # Early stopper
-            if val_loss < best_loss - self.early_stop_threshold:
+            if val_loss < best_loss - self.config["early_stop_threshold"]:
                 best_loss = val_loss
                 patience_counter = 0
             else:
                 patience_counter += 1
-            if patience_counter >= self.early_stop_patience:
-                print(f"Early stopping triggered. No improvement for '{self.early_stop_patience}' epochs.")
+            if patience_counter >= self.config["early_stop_patience"]:
+                print(f"Early stopping triggered. No improvement for '{self.config['early_stop_patience']}' epochs.")
                 break
 
         mem.log_memory(print, "train")
@@ -327,7 +311,7 @@ class DeepMAgePredictor(DeepMAgeBase):
                 features = batch["features"].to(self.device)
                 ages = batch["age"].to(self.device)
                 predictions = self.model(features).squeeze()
-                loss = self.criterions[self.loss_name](predictions, ages)
+                loss = self.criterions[self.config["loss_name"]](predictions, ages)
                 total_loss += loss.item()
         val_loss = total_loss / len(val_loader)
         return val_loss
@@ -337,7 +321,7 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         features_test, ages_test = self.prepare_features(test_df, is_training=False)
         test_dataset = MethylationDataset(features_test, ages_test)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
+        test_loader = DataLoader(test_dataset, batch_size=self.config["batch_size"], shuffle=False)
 
         metric_results = {}
         actual_ages_all = []
@@ -378,7 +362,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         features_df, _ = self.prepare_features(df, is_training=False)
         features_df = features_df[features_df.index.isin(gsm_ids)]
         dataset = MethylationDataset(features_df, None)
-        loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
+        loader = DataLoader(dataset, batch_size=self.config["batch_size"], shuffle=False)
 
         predictions = []
 
@@ -395,55 +379,3 @@ class DeepMAgePredictor(DeepMAgeBase):
         }).set_index("gsm_id")
 
         return predictions_df
-
-    @classmethod
-    def train_pipeline(cls):
-
-        predictor = cls.new_model()
-
-        df = predictor.load_data()
-        train_df, test_df = predictor.split_data_by_type(df)
-
-        # Regular train on a single fold, test, and save a model.
-        predictor.train(train_df)
-        _ = predictor.test_(test_df)
-        predictor.save_model(cls.model_path)
-
-        # Loading a Saved Model and test again.
-        predictor = cls.load_model(cls.model_path)
-        # Make sure that even if we shuffle test_df, we still get the same metrics.
-        test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
-        _ = predictor.test_(test_df)
-
-        # ## Make a prediction
-        #
-        # # Take the first 3 samples from test_df as new data
-        # batch_sample_count = 3
-        # new_data = test_df.head(batch_sample_count)
-        # _, methyl_df = DeepMAgePredictor.split_df(new_data)
-        #
-        # # Rename the index, so it's more like actual new data.
-        # # methyl_df.index = [f"sample_{i}" for i in range(batch_sample_count)]
-        # methyl_df.index = [f"{gsm_id}_" for gsm_id in methyl_df.index]
-        #
-        # # Get reference df, so we can impute and normalize the new data (big source of contention conceptually).
-        # _, ref_df = DeepMAgePredictor.split_df(df)
-        #
-        # # # &&&
-        # # global breakpointer
-        # # breakpointer = True
-        #
-        # prediction_df = predictor.predict_batch(methyl_df, ref_df)
-        #
-        # # Quick sanity check with ages from actual metadata.
-        # metadata_df, _ = DeepMAgePredictor.split_df(df)
-        # actual_age_df = metadata_df[[DeepMAgePredictor.age_col_str]]
-        # predicted_age_df = prediction_df
-        # predicted_age_df.index = [gsm_id[:-1] for gsm_id in predicted_age_df.index]
-        #
-        # prediction_df = actual_age_df.join(predicted_age_df, how="inner")
-        # print(f"Predictions for new data:\n{prediction_df}")
-
-
-if __name__ == "__main__":
-    DeepMAgePredictor.train_pipeline()

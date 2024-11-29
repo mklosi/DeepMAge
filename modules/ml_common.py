@@ -34,7 +34,7 @@ class DeepMAgeBase: # &&& do we even need this?
     # def load_model(cls, model_path):
     #     raise NotImplementedError()
     #
-    # @classmethod
+    # @classmethod # &&& not needed.
     # def new_model(cls):
     #     raise NotImplementedError()
     #
