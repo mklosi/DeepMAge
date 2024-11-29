@@ -86,12 +86,17 @@ class DeepMAgePredictor(DeepMAgeBase):
         self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))  #$ hyper
         self.input_dim = 1000
         # self.epochs = 2
-        self.epochs = 200
+        self.epochs = 9999
         self.batch_size = 32
+
         # lr = 0.0001
-        lr = 0.00001
-        self.early_stop_patience = 10
-        self.early_stop_min_delta = 0.001
+        self.lr_init = 0.0001
+        self.lr_factor = 0.1
+        self.lr_patience = 10
+        self.lr_threshold = 0.001  # Bigger values make lr change faster.
+        self.early_stop_patience = 100
+        self.early_stop_threshold = 0.0001  # Bigger values make early stopping hit faster.
+
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else
             "mps" if torch.backends.mps.is_available()
@@ -107,7 +112,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         # self.loss_str = "mae"
         self.loss_name = "medae"
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr_init)
 
     @classmethod
     def load_model(cls, save_path):
@@ -259,8 +264,17 @@ class DeepMAgePredictor(DeepMAgeBase):
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
 
-        best_val_loss = float('inf')  # Initialize to a large value
-        epochs_no_improve = 0  # Counter for early stopping
+        # Learning rate scheduler
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            factor=self.lr_factor,
+            patience=self.lr_patience,
+            threshold=self.lr_threshold,  # Matches the minimum delta for improvement
+        )
+
+        # Early stopper
+        best_loss = float('inf')
+        patience_counter = 0
 
         for epoch in range(self.epochs):
             # print(f"--- Epoch '{epoch + 1}/{epochs}' --------------------")
@@ -269,7 +283,9 @@ class DeepMAgePredictor(DeepMAgeBase):
             for i, batch in enumerate(train_loader):
                 # print(f"Processing batch: {i+1}/{len(train_loader)}")
 
+                # noinspection PyTypeChecker
                 features = batch["features"].to(self.device)
+                # noinspection PyTypeChecker
                 ages = batch["age"].to(self.device)
 
                 self.optimizer.zero_grad()
@@ -282,18 +298,21 @@ class DeepMAgePredictor(DeepMAgeBase):
             val_loss = self.validate(val_loader)
             print(
                 f"Epoch '{epoch+1}/{self.epochs}', "
+                f"lr: '{round(lr_scheduler.get_last_lr()[0], 10)}', "
                 f"Training Loss: {epoch_loss / len(train_loader)}, "
                 f"Validation Loss: {val_loss}"
             )
 
-            # Early stopping logic
-            if val_loss < best_val_loss - self.early_stop_min_delta:
-                best_val_loss = val_loss
-                epochs_no_improve = 0
-            else:
-                epochs_no_improve += 1
+            # Learning rate scheduler
+            lr_scheduler.step(val_loss)
 
-            if epochs_no_improve >= self.early_stop_patience:
+            # Early stopper
+            if val_loss < best_loss - self.early_stop_threshold:
+                best_loss = val_loss
+                patience_counter = 0
+            else:
+                patience_counter += 1
+            if patience_counter >= self.early_stop_patience:
                 print(f"Early stopping triggered. No improvement for '{self.early_stop_patience}' epochs.")
                 break
 
