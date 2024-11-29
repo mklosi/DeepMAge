@@ -85,8 +85,11 @@ class DeepMAgePredictor(DeepMAgeBase):
         self.imputer = SimpleImputer(strategy='median')
         self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))  #$ hyper
         self.input_dim = 1000
-        self.epochs = 20
+        # self.epochs = 2
+        self.epochs = 200
         self.batch_size = 32
+        # lr = 0.0001
+        lr = 0.00001
         self.early_stop_patience = 10
         self.early_stop_min_delta = 0.001
         self.device = torch.device(
@@ -101,10 +104,10 @@ class DeepMAgePredictor(DeepMAgeBase):
             "mae": nn.L1Loss(),  # Computes Mean Absolute Error (MAE)
             "medae": MedAELoss(),  # Computes Median Absolute Error (MedAE)
         }
-        self.loss_str = "mae"
-        # self.loss_str = "medae"
+        # self.loss_str = "mae"
+        self.loss_name = "medae"
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
 
     @classmethod
     def load_model(cls, save_path):
@@ -242,7 +245,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         return train_test_split(df, test_size=0.2, random_state=42)
 
     def train(self, train_df):
-        print("Training model...")
+        print(f"Loss is '{self.loss_name}'. Training model...")
         train_dt = datetime.now()
 
         train_data, val_data = self.split_data_by_percent(train_df)
@@ -271,13 +274,17 @@ class DeepMAgePredictor(DeepMAgeBase):
 
                 self.optimizer.zero_grad()
                 predictions = self.model(features).squeeze()
-                loss = self.criterions[self.loss_str](predictions, ages)
+                loss = self.criterions[self.loss_name](predictions, ages)
                 loss.backward()
                 self.optimizer.step()
                 epoch_loss += loss.item()
 
             val_loss = self.validate(val_loader)
-            print(f"Epoch '{epoch+1}/{self.epochs}', Training Loss: {epoch_loss / len(train_loader)}, Validation Loss: {val_loss}")
+            print(
+                f"Epoch '{epoch+1}/{self.epochs}', "
+                f"Training Loss: {epoch_loss / len(train_loader)}, "
+                f"Validation Loss: {val_loss}"
+            )
 
             # Early stopping logic
             if val_loss < best_val_loss - self.early_stop_min_delta:
@@ -301,7 +308,7 @@ class DeepMAgePredictor(DeepMAgeBase):
                 features = batch["features"].to(self.device)
                 ages = batch["age"].to(self.device)
                 predictions = self.model(features).squeeze()
-                loss = self.criterions[self.loss_str](predictions, ages)
+                loss = self.criterions[self.loss_name](predictions, ages)
                 total_loss += loss.item()
         val_loss = total_loss / len(val_loader)
         return val_loss
