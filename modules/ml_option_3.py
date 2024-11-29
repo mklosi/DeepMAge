@@ -47,16 +47,16 @@ class DeepMAgeModel(nn.Module):
         self.fc4 = nn.Linear(256, 128)
         self.fc5 = nn.Linear(128, 1)
         self.dropout = nn.Dropout(0.3)
-        self.elu = nn.ELU()
+        self.activation_func = nn.ELU()
 
     def forward(self, x):
-        x = self.elu(self.fc1(x))
+        x = self.activation_func(self.fc1(x))
         x = self.dropout(x)
-        x = self.elu(self.fc2(x))
+        x = self.activation_func(self.fc2(x))
         x = self.dropout(x)
-        x = self.elu(self.fc3(x))
+        x = self.activation_func(self.fc3(x))
         x = self.dropout(x)
-        x = self.elu(self.fc4(x))
+        x = self.activation_func(self.fc4(x))
         x = self.fc5(x)
         return x
 
@@ -74,7 +74,7 @@ class MedAELoss(nn.Module):
 
 class DeepMAgePredictor(DeepMAgeBase):
 
-    model_path = "model_artifacts/model_option_3.predictor"
+    model_path = "model_artifacts/model_option_3.predictor" # &&& this is to be auto-determined, based on hyperparams.
     metadata_df_path = "resources/metadata_derived.parquet"
     methyl_df_path = "resources/methylation_data.parquet"
 
@@ -83,10 +83,10 @@ class DeepMAgePredictor(DeepMAgeBase):
 
     def __init__(self):
         self.imputer = SimpleImputer(strategy='median')
-        self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))  #$ hyper
+        self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))
         self.input_dim = 1000
         # self.epochs = 2
-        self.epochs = 9999
+        self.max_epochs = 9999
         self.batch_size = 32
 
         # lr = 0.0001
@@ -94,7 +94,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         self.lr_factor = 0.1
         self.lr_patience = 10
         self.lr_threshold = 0.001  # Bigger values make lr change faster.
-        self.early_stop_patience = 100
+        self.early_stop_patience = 20
         self.early_stop_threshold = 0.0001  # Bigger values make early stopping hit faster.
 
         self.device = torch.device(
@@ -276,7 +276,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         best_loss = float('inf')
         patience_counter = 0
 
-        for epoch in range(self.epochs):
+        for epoch in range(self.max_epochs):
             # print(f"--- Epoch '{epoch + 1}/{epochs}' --------------------")
             self.model.train()
             epoch_loss = 0
@@ -297,7 +297,7 @@ class DeepMAgePredictor(DeepMAgeBase):
 
             val_loss = self.validate(val_loader)
             print(
-                f"Epoch '{epoch+1}/{self.epochs}', "
+                f"Epoch '{epoch+1}/{self.max_epochs}', "
                 f"lr: '{round(lr_scheduler.get_last_lr()[0], 10)}', "
                 f"Training Loss: {epoch_loss / len(train_loader)}, "
                 f"Validation Loss: {val_loss}"
@@ -412,7 +412,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         # Loading a Saved Model and test again.
         predictor = cls.load_model(cls.model_path)
         # Make sure that even if we shuffle test_df, we still get the same metrics.
-        test_df = test_df.sample(frac=1, random_state=24)
+        test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
         _ = predictor.test_(test_df)
 
         # ## Make a prediction
