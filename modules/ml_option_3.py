@@ -85,7 +85,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         self.imputer = SimpleImputer(strategy='median')
         self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))  #$ hyper
         self.input_dim = 1000
-        self.epochs = 200
+        self.epochs = 20
         self.batch_size = 32
         self.early_stop_patience = 10
         self.early_stop_min_delta = 0.001
@@ -101,15 +101,19 @@ class DeepMAgePredictor(DeepMAgeBase):
             "mae": nn.L1Loss(),  # Computes Mean Absolute Error (MAE)
             "medae": MedAELoss(),  # Computes Median Absolute Error (MedAE)
         }
-        self.loss_str = "medae"
+        self.loss_str = "mae"
+        # self.loss_str = "medae"
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.00001)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
 
     @classmethod
     def load_model(cls, save_path):
         """Load the entire DeepMAgePredictor object."""
         with open(save_path, 'rb') as f:
-            instance = joblib.load(f)
+            state = joblib.load(f)
+        instance = state["predictor_state"]
+        instance.model.load_state_dict(state["model_state_dict"])
+        instance.optimizer.load_state_dict(state["optimizer_state_dict"])
         print(f"'{cls.__name__}' loaded from: {save_path}")
         return instance
 
@@ -119,8 +123,13 @@ class DeepMAgePredictor(DeepMAgeBase):
 
     def save_model(self, save_path):
         """Save the entire DeepMAgePredictor object."""
+        state = {
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "predictor_state": self,
+        }
         with open(save_path, 'wb') as f:
-            joblib.dump(self, f)
+            joblib.dump(state, f)
         print(f"'{self.__class__.__name__}' saved to: {save_path}")
 
     @classmethod

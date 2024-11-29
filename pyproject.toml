@@ -21,6 +21,7 @@ timeout-decorator = "*"
 torch = "*"
 torchmetrics = "*"
 torchvision = "*"
+#torch-early-stopping = "*"
 
 [build-system]
 requires = ["poetry-core"]
