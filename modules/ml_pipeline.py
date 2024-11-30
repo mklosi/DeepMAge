@@ -1,35 +1,68 @@
+from copy import deepcopy
+
 import numpy as np
+import json
+import pandas as pd
 from torch import nn
 
 from modules.ml_option_3 import DeepMAgePredictor, DeepMAgeModel
-from modules.ml_common import DeepMAgeBase
+from modules.ml_common import DeepMAgeBase, merge_dicts
 
-pipeline_configs = [
-    {
-        "predictor_class": DeepMAgePredictor,
-        "imputation_strategy": "median",
-        "max_epochs": 9999,
-        "batch_size": 32,
-        "lr_init": 0.0001,
-        "lr_factor": 0.1,
-        "lr_patience": 10,
-        "lr_threshold": 0.001,  # Bigger values make lr change faster.
-        "early_stop_patience": 20,
-        "early_stop_threshold": 0.0001,  # Bigger values make early stopping hit faster.
-        "model": {
-            "model_class": DeepMAgeModel,
-            "input_dim": 1000,
-            "layer2_in": 512,
-            "layer3_in": 512,
-            "layer4_in": 256,
-            "layer5_in": 128,
-            "dropout": 0.3,
-            "activation_func": nn.ELU(),
-        },
-        "loss_name": "medae",
-        "remove_nan_samples_perc": 10,
-        "test_ratio": 0.2,
+default_args_dict = {
+    "predictor_class": DeepMAgePredictor,
+    "model": {
+        "model_class": DeepMAgeModel,
     },
+}
+
+main_args_list = [
+
+    {
+        # "predictor_class": DeepMAgePredictor,
+        "imputation_strategy": imputation_strategy,
+        "max_epochs": max_epochs,
+        "batch_size": batch_size,
+        "lr_init": lr_init,
+        "lr_factor": lr_factor,
+        "lr_patience": lr_patience,
+        "lr_threshold": lr_threshold,  # Bigger values make lr change faster.
+        "early_stop_patience": early_stop_patience,
+        "early_stop_threshold": early_stop_threshold,  # Bigger values make early stopping hit faster.
+        "model": {
+            # "model_class": DeepMAgeModel,
+            "input_dim": model__input_dim,
+            "layer2_in": model__layer2_in,
+            "layer3_in": model__layer3_in,
+            "layer4_in": model__layer4_in,
+            "layer5_in": model__layer5_in,
+            "dropout": model__dropout,
+            "activation_func": model__activation_func,
+        },
+        "loss_name": loss_name,
+        "remove_nan_samples_perc": remove_nan_samples_perc,
+        "test_ratio": test_ratio,
+    }
+
+    for imputation_strategy in ["median"]
+    for max_epochs in [9999]
+    for batch_size in [32]
+    for lr_init in [0.0001]
+    for lr_factor in [0.1]
+    for lr_patience in [10]
+    for lr_threshold in [0.001]
+    for early_stop_patience in [20]
+    for early_stop_threshold in [0.0001]
+    for model__input_dim in [1000]
+    for model__layer2_in in [512]
+    for model__layer3_in in [512]
+    for model__layer4_in in [256]
+    for model__layer5_in in [128]
+    for model__dropout in [0.3]
+    for model__activation_func in ["elu"]
+    for loss_name in ["medae"]
+    for remove_nan_samples_perc in [10]
+    for test_ratio in [0.2]
+
 ]
 
 
@@ -48,8 +81,9 @@ def train_pipeline(cls, config):
     # Loading a Saved Model and test again.
     predictor = cls.load_model(cls.model_path)
     # Make sure that even if we shuffle test_df, we still get the same metrics.
-    test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
-    _ = predictor.test_(test_df)
+    # test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
+    r = predictor.test_(test_df)
+    return r
 
     # ## Make a prediction
     #
@@ -82,9 +116,37 @@ def train_pipeline(cls, config):
 
 
 def main():
-    for config in pipeline_configs:
+
+    seen = set()
+    main_args_json_ls = [json.dumps(dict_) for dict_ in main_args_list]
+    dupes = [x for x in main_args_json_ls if x in seen or seen.add(x)]
+    if dupes:
+        raise ValueError(f"Duplicated main_args detected: {dupes}")
+
+    configs = []
+    for main_args_dict in main_args_list:
+        merged_dict = merge_dicts(default_args_dict, main_args_dict)
+        configs.append(merged_dict)
+
+    results = []
+    for config in configs:
         predictor_class = config["predictor_class"]
-        train_pipeline(predictor_class, config)
+        result = train_pipeline(predictor_class, config)
+        results.append(result)
+
+    df = pd.DataFrame({
+        "mae": [result["mae"] for result in results],
+        "medae": [result["medae"] for result in results],
+        "mse": [result["mse"] for result in results],
+    })
+
+
+
+
+    fjdkfjdkfdjk = 1
+
+
+
 
 
 if __name__ == "__main__":

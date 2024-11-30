@@ -39,6 +39,7 @@ set_seeds()
 
 class DeepMAgeModel(nn.Module):
     """Deep neural network for age prediction."""
+
     def __init__(self, config):
         super(DeepMAgeModel, self).__init__()
         self.config = config
@@ -48,7 +49,10 @@ class DeepMAgeModel(nn.Module):
         self.fc4 = nn.Linear(self.config["layer4_in"], self.config["layer5_in"])
         self.fc5 = nn.Linear(self.config["layer5_in"], 1)
         self.dropout = nn.Dropout(self.config["dropout"])
-        self.activation_func = self.config["activation_func"]
+        activation_funcs = {
+            "elu": nn.ELU(),
+        }
+        self.activation_func = activation_funcs[self.config["activation_func"]]
 
     def forward(self, x):
         x = self.activation_func(self.fc1(x))
