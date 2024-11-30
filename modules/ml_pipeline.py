@@ -66,17 +66,17 @@ main_args_list = [
 
 def train_pipeline(cls, config):
 
-    predictor = cls.new_model(config)
+    predictor = cls(config)
 
     df = predictor.load_data()
     train_df, test_df = predictor.split_data_by_type(df)
 
     # # Regular train on a single fold, test, and save a model.
     predictor.train(train_df)
-    predictor.save_model(cls.model_path)
+    predictor.save_predictor()
 
     # Loading a Saved Model and test again.
-    predictor = cls.load_model(cls.model_path)
+    predictor = predictor.load_predictor()
     # Make sure that even if we shuffle test_df, we still get the same metrics.
     # test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
 

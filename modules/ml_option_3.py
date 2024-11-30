@@ -81,7 +81,7 @@ class MedAELoss(nn.Module):
 
 class DeepMAgePredictor(DeepMAgeBase):
 
-    model_path = "model_artifacts/model_option_3.predictor" # &&& this is to be auto-determined, based on hyperparams.
+    predictor_base_dir = "predictor_artifacts"
     metadata_df_path = "resources/metadata_derived.parquet"
     methyl_df_path = "resources/methylation_data.parquet"
 
@@ -112,34 +112,35 @@ class DeepMAgePredictor(DeepMAgeBase):
         config_id = hashlib.md5(config_json.encode("utf8")).hexdigest()
         return config_id
 
-    @classmethod
-    def load_model(cls, save_path):
+    def load_predictor(self):
         """Load the entire DeepMAgePredictor object."""
-        with open(save_path, 'rb') as f:
+
+        config_id = self.get_config_id()
+        predictor_path = f"{self.predictor_base_dir}/{config_id}.predictor"
+        with open(predictor_path, 'rb') as f:
             state = joblib.load(f)
         instance = state["predictor_state"]
         instance.model.load_state_dict(state["model_state_dict"])
         instance.optimizer.load_state_dict(state["optimizer_state_dict"])
-        print(f"'{cls.__name__}' loaded from: {save_path}")
+        print(f"'{self.__class__.__name__}' loaded from: {predictor_path}")
         return instance
 
-    @classmethod
-    def new_model(cls, config):
-        return cls(config)
-
-    def save_model(self, save_path):
+    def save_predictor(self):
         """Save the entire DeepMAgePredictor object."""
+
         state = {
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "predictor_state": self,
         }
-        with open(save_path, 'wb') as f:
+        config_id = self.get_config_id()
+        predictor_path = f"{self.predictor_base_dir}/{config_id}.predictor"
+        with open(predictor_path, 'wb') as f:
             joblib.dump(state, f)
-        print(f"'{self.__class__.__name__}' saved to: {save_path}")
+        print(f"'{self.__class__.__name__}' saved to: {predictor_path}")
 
-    @classmethod
-    def join_dfs(cls, metadata_df, methyl_df):
+    @staticmethod
+    def join_dfs(metadata_df, methyl_df):
         meta_cols = metadata_df.columns
         df = methyl_df.join(metadata_df, how="inner")
         # Rearrange cols, so the metadata cols are first.
