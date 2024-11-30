@@ -210,6 +210,9 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         metadata_df, methyl_df = self.split_df(df)
 
+        # Make sure all values are numeric. Without this we were having issues with the 'mean' imputation strategy.
+        methyl_df = methyl_df.apply(pd.to_numeric, errors='coerce')
+
         ## impute #$ docs
         if is_training:
             methyl_df = pd.DataFrame(self.imputer.fit_transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns)
@@ -393,3 +396,52 @@ class DeepMAgePredictor(DeepMAgeBase):
         }).set_index("gsm_id")
 
         return predictions_df
+
+
+    def train_pipeline(self):
+
+        df = self.load_data()
+        train_df, test_df = self.split_data_by_type(df)
+
+        # # Regular train on a single fold, test, and save a model.
+        self.train(train_df)
+        # self.save_predictor()
+
+        # Loading a Saved Model and test again.
+        # predictor = self.load_predictor()
+        # Make sure that even if we shuffle test_df, we still get the same metrics.
+        # test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
+
+        result_dict = self.test_(test_df)
+
+        result_dict = {"config_id": self.get_config_id(), **result_dict}
+        return result_dict
+
+        # ## Make a prediction
+        #
+        # # Take the first 3 samples from test_df as new data
+        # batch_sample_count = 3
+        # new_data = test_df.head(batch_sample_count)
+        # _, methyl_df = DeepMAgePredictor.split_df(new_data)
+        #
+        # # Rename the index, so it's more like actual new data.
+        # # methyl_df.index = [f"sample_{i}" for i in range(batch_sample_count)]
+        # methyl_df.index = [f"{gsm_id}_" for gsm_id in methyl_df.index]
+        #
+        # # Get reference df, so we can impute and normalize the new data (big source of contention conceptually).
+        # _, ref_df = DeepMAgePredictor.split_df(df)
+        #
+        # # # &&&
+        # # global breakpointer
+        # # breakpointer = True
+        #
+        # prediction_df = self.predict_batch(methyl_df, ref_df)
+        #
+        # # Quick sanity check with ages from actual metadata.
+        # metadata_df, _ = DeepMAgePredictor.split_df(df)
+        # actual_age_df = metadata_df[[DeepMAgePredictor.age_col_str]]
+        # predicted_age_df = prediction_df
+        # predicted_age_df.index = [gsm_id[:-1] for gsm_id in predicted_age_df.index]
+        #
+        # prediction_df = actual_age_df.join(predicted_age_df, how="inner")
+        # print(f"Predictions for new data:\n{prediction_df}")

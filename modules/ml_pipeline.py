@@ -1,7 +1,9 @@
 import json
+from datetime import datetime
 
 import pandas as pd
 
+from modules.memory import Memory
 from modules.ml_common import merge_dicts
 # noinspection PyUnresolvedReferences
 from modules.ml_option_3 import DeepMAgePredictor
@@ -41,81 +43,55 @@ main_args_list = [
         "test_ratio": test_ratio,
     }
 
-    for imputation_strategy in ["median"]
-    for max_epochs in [9999]
-    for batch_size in [32]
+    # for imputation_strategy in ["median"]
+    for imputation_strategy in ["mean", "median"]
+
+    # for max_epochs in [9999]
+    for max_epochs in [2]
+
+    # for batch_size in [32]
+    for batch_size in [32, 64]
+    # for batch_size in [16, 32, 64, 128, 256, 512, 1024]
+
     for lr_init in [0.0001]
+
     for lr_factor in [0.1]
+
     for lr_patience in [10]
+
     for lr_threshold in [0.001]
+
     for early_stop_patience in [20]
+
     for early_stop_threshold in [0.0001]
+
     for model__input_dim in [1000]
+
     for model__layer2_in in [512]
+
     for model__layer3_in in [512]
+
     for model__layer4_in in [256]
+
     for model__layer5_in in [128]
+
     for model__dropout in [0.3]
+
     for model__activation_func in ["elu"]
+
     for loss_name in ["medae"]
+
     for remove_nan_samples_perc in [10]
+
     for test_ratio in [0.2]
 
 ]
 
 
-def train_pipeline(cls, config):
-
-    predictor = cls(config)
-
-    df = predictor.load_data()
-    train_df, test_df = predictor.split_data_by_type(df)
-
-    # # Regular train on a single fold, test, and save a model.
-    predictor.train(train_df)
-    predictor.save_predictor()
-
-    # Loading a Saved Model and test again.
-    predictor = predictor.load_predictor()
-    # Make sure that even if we shuffle test_df, we still get the same metrics.
-    # test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
-
-    result_dict = predictor.test_(test_df)
-
-    result_dict = {"config_id": predictor.get_config_id(), **result_dict}
-    return result_dict
-
-    # ## Make a prediction
-    #
-    # # Take the first 3 samples from test_df as new data
-    # batch_sample_count = 3
-    # new_data = test_df.head(batch_sample_count)
-    # _, methyl_df = DeepMAgePredictor.split_df(new_data)
-    #
-    # # Rename the index, so it's more like actual new data.
-    # # methyl_df.index = [f"sample_{i}" for i in range(batch_sample_count)]
-    # methyl_df.index = [f"{gsm_id}_" for gsm_id in methyl_df.index]
-    #
-    # # Get reference df, so we can impute and normalize the new data (big source of contention conceptually).
-    # _, ref_df = DeepMAgePredictor.split_df(df)
-    #
-    # # # &&&
-    # # global breakpointer
-    # # breakpointer = True
-    #
-    # prediction_df = predictor.predict_batch(methyl_df, ref_df)
-    #
-    # # Quick sanity check with ages from actual metadata.
-    # metadata_df, _ = DeepMAgePredictor.split_df(df)
-    # actual_age_df = metadata_df[[DeepMAgePredictor.age_col_str]]
-    # predicted_age_df = prediction_df
-    # predicted_age_df.index = [gsm_id[:-1] for gsm_id in predicted_age_df.index]
-    #
-    # prediction_df = actual_age_df.join(predicted_age_df, how="inner")
-    # print(f"Predictions for new data:\n{prediction_df}")
-
-
 def main():
+
+    mem = Memory(noop=False)
+    start_dt = datetime.now()
 
     seen = set()
     main_args_json_ls = [json.dumps(dict_) for dict_ in main_args_list]
@@ -129,22 +105,46 @@ def main():
         configs.append(merged_dict)
 
     results = []
+    best_predictor = None
+    best_loss = float('inf')
+    print(f"Running '{len(configs)}' train pipelines...")
     for config in configs:
         predictor_class_name = config["predictor_class"]
-        predictor_class = globals()[predictor_class_name]
-        result = train_pipeline(predictor_class, config)
+        predictor = globals()[predictor_class_name](config)
+        config_id = predictor.get_config_id()
+        print(f"--- Train pipeline for config_id: {config_id} --------------------------------------------")
+
+        train_pipe_dt = datetime.now()
+        result = predictor.train_pipeline()
+        train_pipe_runtime = datetime.now() - train_pipe_dt
+        result = {"train_pipe_runtime": train_pipe_runtime, **result}
+        print(f"Train pipeline runtime for '{config_id}': {train_pipe_runtime}")
+
+        # Keep track of the best predictor so far.
+        curr_loss = result[config["loss_name"]]
+        if curr_loss < best_loss:
+            best_loss = curr_loss
+            best_predictor = predictor
+
         results.append(result)
 
-    df = pd.DataFrame(results)
-    print(df)
+    print(f"--- End of '{len(configs)}' train pipelines -----------------------------------------------------------")
 
+    # Save best predictor
+    print("Saving best_predictor...")
+    best_predictor.save_predictor()
 
+    result_df = pd.DataFrame(results)
+    result_df = result_df.sort_values(by=best_predictor.config["loss_name"])
+    print(f"result_df:\n{result_df}")
 
+    start_dt_str = start_dt.isoformat()
+    result_df_path = f"result_artifacts/result_{start_dt_str}.parquet"
+    result_df.to_parquet(result_df_path, engine='pyarrow', index=False)
+    print(f"Saved result_df to: {result_df_path}")
 
-    fjdkfjdkfdjk = 1
-
-
-
+    mem.log_memory(print, "ml_pipeline_end")
+    print(f"Total runtime: {datetime.now() - start_dt}")
 
 
 if __name__ == "__main__":

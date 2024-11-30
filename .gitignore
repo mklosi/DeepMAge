@@ -8,5 +8,4 @@ predictor_artifacts
 resources
 resources_methylprep
 states
-
-#GSE* &&&
+result_artifacts
