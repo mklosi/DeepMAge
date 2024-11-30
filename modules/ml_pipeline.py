@@ -1,17 +1,15 @@
-from copy import deepcopy
-
-import numpy as np
 import json
-import pandas as pd
-from torch import nn
 
-from modules.ml_option_3 import DeepMAgePredictor, DeepMAgeModel
-from modules.ml_common import DeepMAgeBase, merge_dicts
+import pandas as pd
+
+from modules.ml_common import merge_dicts
+# noinspection PyUnresolvedReferences
+from modules.ml_option_3 import DeepMAgePredictor
 
 default_args_dict = {
-    "predictor_class": DeepMAgePredictor,
+    "predictor_class": "DeepMAgePredictor",
     "model": {
-        "model_class": DeepMAgeModel,
+        "model_class": "DeepMAgeModel",
     },
 }
 
@@ -73,17 +71,19 @@ def train_pipeline(cls, config):
     df = predictor.load_data()
     train_df, test_df = predictor.split_data_by_type(df)
 
-    # Regular train on a single fold, test, and save a model.
+    # # Regular train on a single fold, test, and save a model.
     predictor.train(train_df)
-    _ = predictor.test_(test_df)
     predictor.save_model(cls.model_path)
 
     # Loading a Saved Model and test again.
     predictor = cls.load_model(cls.model_path)
     # Make sure that even if we shuffle test_df, we still get the same metrics.
     # test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
-    r = predictor.test_(test_df)
-    return r
+
+    result_dict = predictor.test_(test_df)
+
+    result_dict = {"config_id": predictor.get_config_id(), **result_dict}
+    return result_dict
 
     # ## Make a prediction
     #
@@ -130,15 +130,13 @@ def main():
 
     results = []
     for config in configs:
-        predictor_class = config["predictor_class"]
+        predictor_class_name = config["predictor_class"]
+        predictor_class = globals()[predictor_class_name]
         result = train_pipeline(predictor_class, config)
         results.append(result)
 
-    df = pd.DataFrame({
-        "mae": [result["mae"] for result in results],
-        "medae": [result["medae"] for result in results],
-        "mse": [result["mse"] for result in results],
-    })
+    df = pd.DataFrame(results)
+    print(df)
 
 
 

@@ -11,7 +11,7 @@ for gse_id in GSE59065 GSE106648 GSE61496 GSE107459 GSE77696
 do
     echo "--- $gse_id ------------------"
     python -m methylprep -v download -i $gse_id -d resources_methylprep/"$gse_id"_download_pandas_1.3.5
-    echo "AAA done with download"
+    echo "Done with download"
     rm -rf resources_methylprep/"$gse_id"_download_pandas_1.3.5/*/*.idat
-    echo "AAA done with delete"
+    echo "Done with delete"
 done

@@ -1,4 +1,6 @@
 from collections import defaultdict
+import hashlib
+import json
 import random
 import joblib
 import torch
@@ -95,13 +97,20 @@ class DeepMAgePredictor(DeepMAgeBase):
         )
         self.imputer = SimpleImputer(strategy=self.config["imputation_strategy"])
         self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))
-        self.model = config["model"]["model_class"](config=self.config["model"]).to(self.device)
+        model_class_name = config["model"]["model_class"]
+        model_class = globals()[model_class_name]
+        self.model = model_class(config=self.config["model"]).to(self.device)
         self.criterions = {
             "mse": nn.MSELoss(),
             "mae": nn.L1Loss(),  # Computes Mean Absolute Error (MAE)
             "medae": MedAELoss(),  # Computes Median Absolute Error (MedAE)
         }
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config["lr_init"])
+
+    def get_config_id(self):
+        config_json = json.dumps(self.config, indent=4)
+        config_id = hashlib.md5(config_json.encode("utf8")).hexdigest()
+        return config_id
 
     @classmethod
     def load_model(cls, save_path):
@@ -327,7 +336,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         test_dataset = MethylationDataset(features_test, ages_test)
         test_loader = DataLoader(test_dataset, batch_size=self.config["batch_size"], shuffle=False)
 
-        metric_results = {}
+        result_dict = {}
         actual_ages_all = []
         predictions_all = []
 
@@ -345,12 +354,12 @@ class DeepMAgePredictor(DeepMAgeBase):
             actual_ages_all = torch.tensor(actual_ages_all)
 
             for name, criterion in self.criterions.items():
-                metric_results[name] = criterion(predictions_all, actual_ages_all).item()
+                result_dict[name] = criterion(predictions_all, actual_ages_all).item()
 
-        for name, value in metric_results.items():
+        for name, value in result_dict.items():
             print(f"Test '{name}': {value}")
 
-        return metric_results
+        return result_dict
 
     def predict_batch(self, new_df, ref_df):
         print("Batch predicting...")
