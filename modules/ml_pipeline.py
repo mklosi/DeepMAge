@@ -29,10 +29,16 @@ main_args_list = [
         "early_stop_patience": early_stop_patience,
         "early_stop_threshold": early_stop_threshold,  # Bigger values make early stopping hit faster.
         "model": {
-            "layer2_in": model__layer2_in,
-            "layer3_in": model__layer3_in,
-            "layer4_in": model__layer4_in,
-            "layer5_in": model__layer5_in,
+            # This is a list of integers. The len(list) shows the number of
+            #   inner layers, while the number itself is the input/output
+            #   neurons for each layer. For example, if the list is [128, 64, 32],
+            #   it means there are 3 inner layers. The first inner layer (the 2nd actual layer)
+            #   takes in how many inputs the actual first layer gives it,
+            #   and outputs 128 outputs. The 2nd inner layer takes in
+            #   128 inputs and gives 64 outputs. The final inner layer takes 64
+            #   and gives 32. The last actual layer (final layer) would take
+            #   in 32 and output 1 value, since we just want one final value.
+            "inner_layers": model__inner_layers,
             "dropout": model__dropout,
             "activation_func": model__activation_func,
         },
@@ -67,13 +73,7 @@ main_args_list = [
 
     for model__input_dim in [1000]
 
-    for model__layer2_in in [512]
-
-    for model__layer3_in in [512]
-
-    for model__layer4_in in [256]
-
-    for model__layer5_in in [128]
+    for model__inner_layers in [[512, 512, 256, 128]]
 
     for model__dropout in [0.3]
 
@@ -135,8 +135,8 @@ def main():
     mem = Memory(noop=False)
     start_dt = datetime.now()
 
-    start_dt_iso = start_dt.isoformat()
-    result_df_path = f"result_artifacts/result_{start_dt_iso}.parquet"
+    # start_dt_iso = start_dt.isoformat()
+    # result_df_path = f"result_artifacts/result_{start_dt_iso}.parquet"
 
     seen = set()
     main_args_json_ls = [json.dumps(dict_) for dict_ in main_args_list]
