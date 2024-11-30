@@ -8,7 +8,7 @@ def main():
     model_path = DeepMAgeBase.model_path
 
     # Load trained model
-    predictor = DeepMAgePredictor.load_predictor(model_path, input_dim)
+    predictor = DeepMAgePredictor.load(model_path, input_dim)
 
     # Example methylation beta values for a sample
     example_sample = np.random.rand(1, input_dim)  # Replace with real data

@@ -2,6 +2,8 @@ from collections import defaultdict
 import hashlib
 import json
 import random
+from pathlib import Path
+
 import joblib
 import torch
 import torch.nn as nn
@@ -53,6 +55,7 @@ class DeepMAgeModel(nn.Module):
         self.dropout = nn.Dropout(self.config["dropout"])
         activation_funcs = {
             "elu": nn.ELU(),
+            "relu": nn.ReLU(),
         }
         self.activation_func = activation_funcs[self.config["activation_func"]]
 
@@ -112,7 +115,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         config_id = hashlib.md5(config_json.encode("utf8")).hexdigest()
         return config_id
 
-    def load_predictor(self):
+    def load(self):
         """Load the entire DeepMAgePredictor object."""
 
         config_id = self.get_config_id()
@@ -125,7 +128,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         print(f"'{self.__class__.__name__}' loaded from: {predictor_path}")
         return instance
 
-    def save_predictor(self):
+    def save(self):
         """Save the entire DeepMAgePredictor object."""
 
         state = {
@@ -138,6 +141,13 @@ class DeepMAgePredictor(DeepMAgeBase):
         with open(predictor_path, 'wb') as f:
             joblib.dump(state, f)
         print(f"'{self.__class__.__name__}' saved to: {predictor_path}")
+
+    def delete(self):
+        """Delete the saved artifact for this predictor to save money."""
+        config_id = self.get_config_id()
+        predictor_path = Path(f"{self.predictor_base_dir}/{config_id}.predictor")
+        predictor_path.unlink(missing_ok=True)
+        print(f"Deleted predictor at: {predictor_path}")
 
     @staticmethod
     def join_dfs(metadata_df, methyl_df):

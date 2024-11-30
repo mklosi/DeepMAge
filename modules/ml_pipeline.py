@@ -12,13 +12,13 @@ default_args_dict = {
     "predictor_class": "DeepMAgePredictor",
     "model": {
         "model_class": "DeepMAgeModel",
+        "input_dim": 1000,
     },
 }
 
 main_args_list = [
 
     {
-        # "predictor_class": DeepMAgePredictor,
         "imputation_strategy": imputation_strategy,
         "max_epochs": max_epochs,
         "batch_size": batch_size,
@@ -29,8 +29,6 @@ main_args_list = [
         "early_stop_patience": early_stop_patience,
         "early_stop_threshold": early_stop_threshold,  # Bigger values make early stopping hit faster.
         "model": {
-            # "model_class": DeepMAgeModel,
-            "input_dim": model__input_dim,
             "layer2_in": model__layer2_in,
             "layer3_in": model__layer3_in,
             "layer4_in": model__layer4_in,
@@ -43,8 +41,10 @@ main_args_list = [
         "test_ratio": test_ratio,
     }
 
+    # ------------------------------------------------------
+
     # for imputation_strategy in ["median"]
-    for imputation_strategy in ["mean", "median"]
+    for imputation_strategy in ["median", "mean"]
 
     # for max_epochs in [9999]
     for max_epochs in [2]
@@ -85,6 +85,48 @@ main_args_list = [
 
     for test_ratio in [0.2]
 
+    # ------------------------------------------------------
+
+    # # for imputation_strategy in ["median"]
+    # for imputation_strategy in ["mean", "median"]
+    #
+    # for max_epochs in [999]
+    # # for max_epochs in [2]
+    #
+    # # for batch_size in [32]
+    # # for batch_size in [32, 64]
+    # for batch_size in [16, 32, 64, 1024]
+    #
+    # for lr_init in [0.001, 0.0001, 0.00001]
+    #
+    # for lr_factor in [0.1, 0.5]
+    #
+    # for lr_patience in [10, 20, 50]
+    #
+    # for lr_threshold in [0.0001, 0.01, 1.0]
+    #
+    # for early_stop_patience in [20, 50, 100]
+    #
+    # for early_stop_threshold in [0.0001, 0.01, 1.0]
+    #
+    # for model__layer2_in in [512]
+    #
+    # for model__layer3_in in [512]
+    #
+    # for model__layer4_in in [256]
+    #
+    # for model__layer5_in in [128]
+    #
+    # for model__dropout in [0.1, 0.3, 0.5]
+    #
+    # for model__activation_func in ["elu", "relu"]
+    #
+    # for loss_name in ["medae"]
+    #
+    # for remove_nan_samples_perc in [10, 20]
+    #
+    # for test_ratio in [0.2]
+
 ]
 
 
@@ -92,6 +134,9 @@ def main():
 
     mem = Memory(noop=False)
     start_dt = datetime.now()
+
+    start_dt_iso = start_dt.isoformat()
+    result_df_path = f"result_artifacts/result_{start_dt_iso}.parquet"
 
     seen = set()
     main_args_json_ls = [json.dumps(dict_) for dict_ in main_args_list]
@@ -104,9 +149,9 @@ def main():
         merged_dict = merge_dicts(default_args_dict, main_args_dict)
         configs.append(merged_dict)
 
-    results = []
-    best_predictor = None
+    result_df = pd.DataFrame()
     best_loss = float('inf')
+    best_predictor = None
     print(f"Running '{len(configs)}' train pipelines...")
     for config in configs:
         predictor_class_name = config["predictor_class"]
@@ -120,28 +165,31 @@ def main():
         result = {"train_pipe_runtime": train_pipe_runtime, **result}
         print(f"Train pipeline runtime for '{config_id}': {train_pipe_runtime}")
 
+        result_df_dt = datetime.now()
+        # 1 Update result_df
+        curr_df = pd.DataFrame([result])
+        result_df = pd.concat([result_df, curr_df])
+        # 2 Update result_df
+        # &&&
+        print(f"result_df create runtime: {datetime.now() - result_df_dt}")
+
+        result_df = result_df.sort_values(by=predictor.config["loss_name"])
+        print(f"result_df:\n{result_df.head(5)}")
+
+        # result_df.to_parquet(result_df_path, engine='pyarrow', index=False)
+        # print(f"Saved result_df to: {result_df_path}")
+
         # Keep track of the best predictor so far.
         curr_loss = result[config["loss_name"]]
         if curr_loss < best_loss:
             best_loss = curr_loss
+            print("Found better loss. Swapping best_predictor...")
+            predictor.save()
+            if best_predictor is not None:
+                best_predictor.delete()
             best_predictor = predictor
 
-        results.append(result)
-
     print(f"--- End of '{len(configs)}' train pipelines -----------------------------------------------------------")
-
-    # Save best predictor
-    print("Saving best_predictor...")
-    best_predictor.save_predictor()
-
-    result_df = pd.DataFrame(results)
-    result_df = result_df.sort_values(by=best_predictor.config["loss_name"])
-    print(f"result_df:\n{result_df}")
-
-    start_dt_str = start_dt.isoformat()
-    result_df_path = f"result_artifacts/result_{start_dt_str}.parquet"
-    result_df.to_parquet(result_df_path, engine='pyarrow', index=False)
-    print(f"Saved result_df to: {result_df_path}")
 
     mem.log_memory(print, "ml_pipeline_end")
     print(f"Total runtime: {datetime.now() - start_dt}")
