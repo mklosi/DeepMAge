@@ -184,7 +184,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config["lr_init"])
 
     def get_config_id(self):
-        config_json = json.dumps(self.config, indent=4)
+        config_json = json.dumps(self.config, indent=4) # &&& indent.
         config_id = hashlib.md5(config_json.encode("utf8")).hexdigest()
         return config_id
 
@@ -249,31 +249,31 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         df = df[df["type"].isin(["train", "verification"])]
 
-        # &&&
-        ## Show which gsm_ids have missing values and the corresponding cpg sites that contain those nans.
-        nan_counts = df.isna().sum(axis=1)  # Count NaNs per GSM ID
-        gsm_ids_with_nans = nan_counts[nan_counts > 0]
-        nan_cpg_sites = df.apply(lambda row: ','.join(row.index[row.isna()]), axis=1)
-        gsm_ids_with_nans_df = pd.DataFrame({
-            'gsm_id': gsm_ids_with_nans.index,
-            'gse_id': df.loc[gsm_ids_with_nans.index, 'gse_id'].values,
-            'type': df.loc[gsm_ids_with_nans.index, 'type'].values,
-            'nan_count': gsm_ids_with_nans.values,
-            'cpg_sites_with_nan': nan_cpg_sites[gsm_ids_with_nans.index].values
-        })
-        gsm_ids_with_nans_sorted_df = gsm_ids_with_nans_df.sort_values(by="nan_count", ascending=False)
-
-        # &&&
-        ## Show which cpg site ids have missing values and the corresponding gsm_ids that contain those nans.
-        nan_counts_per_cpg = df.isna().sum(axis=0)
-        cpg_sites_with_nans = nan_counts_per_cpg[nan_counts_per_cpg > 0]
-        nan_gsm_ids_per_cpg = df.apply(lambda col: ','.join(df.index[col.isna()]), axis=0)
-        cpg_sites_with_nans_df = pd.DataFrame({
-            'cpg_site_id': cpg_sites_with_nans.index,
-            'nan_count': cpg_sites_with_nans.values,
-            'gsm_ids_with_nan': nan_gsm_ids_per_cpg[cpg_sites_with_nans.index].values
-        })
-        cpg_sites_with_nans_sorted_df = cpg_sites_with_nans_df.sort_values(by="nan_count", ascending=False)
+        # # &&&
+        # ## Show which gsm_ids have missing values and the corresponding cpg sites that contain those nans.
+        # nan_counts = df.isna().sum(axis=1)  # Count NaNs per GSM ID
+        # gsm_ids_with_nans = nan_counts[nan_counts > 0]
+        # nan_cpg_sites = df.apply(lambda row: ','.join(row.index[row.isna()]), axis=1)
+        # gsm_ids_with_nans_df = pd.DataFrame({
+        #     'gsm_id': gsm_ids_with_nans.index,
+        #     'gse_id': df.loc[gsm_ids_with_nans.index, 'gse_id'].values,
+        #     'type': df.loc[gsm_ids_with_nans.index, 'type'].values,
+        #     'nan_count': gsm_ids_with_nans.values,
+        #     'cpg_sites_with_nan': nan_cpg_sites[gsm_ids_with_nans.index].values
+        # })
+        # gsm_ids_with_nans_sorted_df = gsm_ids_with_nans_df.sort_values(by="nan_count", ascending=False)
+        #
+        # # &&&
+        # ## Show which cpg site ids have missing values and the corresponding gsm_ids that contain those nans.
+        # nan_counts_per_cpg = df.isna().sum(axis=0)
+        # cpg_sites_with_nans = nan_counts_per_cpg[nan_counts_per_cpg > 0]
+        # nan_gsm_ids_per_cpg = df.apply(lambda col: ','.join(df.index[col.isna()]), axis=0)
+        # cpg_sites_with_nans_df = pd.DataFrame({
+        #     'cpg_site_id': cpg_sites_with_nans.index,
+        #     'nan_count': cpg_sites_with_nans.values,
+        #     'gsm_ids_with_nan': nan_gsm_ids_per_cpg[cpg_sites_with_nans.index].values
+        # })
+        # cpg_sites_with_nans_sorted_df = cpg_sites_with_nans_df.sort_values(by="nan_count", ascending=False)
 
         return df
 

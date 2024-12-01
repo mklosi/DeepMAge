@@ -6,7 +6,7 @@ import pandas as pd
 from modules.memory import Memory
 from modules.ml_common import merge_dicts
 # noinspection PyUnresolvedReferences
-from modules.ml_option_3 import DeepMAgePredictor
+from modules.ml_option_3 import DeepMAgePredictor, set_seeds
 
 default_args_dict = {
     "predictor_class": "DeepMAgePredictor",
@@ -56,87 +56,89 @@ main_args_list = [
 
     # ------------------------------------------------------
 
-    # # for imputation_strategy in ["median"]
-    # for imputation_strategy in ["median", "mean"]
-    #
-    # # for max_epochs in [9999]
+    for imputation_strategy in ["median"]
+
+    # for max_epochs in [9999]
     # for max_epochs in [2]
-    #
-    # # for batch_size in [32]
-    # for batch_size in [32, 64]
-    # # for batch_size in [16, 32, 64, 128, 256, 512, 1024]
-    #
-    # for lr_init in [0.0001]
-    #
-    # for lr_factor in [0.1]
-    #
-    # for lr_patience in [10]
-    #
-    # for lr_threshold in [0.001]
-    #
-    # for early_stop_patience in [20]
-    #
-    # for early_stop_threshold in [0.0001]
-    #
-    # for model__input_dim in [1000]
-    #
-    # # for model__layer2_in in [512]
-    # # for model__layer3_in in [512]
-    # # for model__layer4_in in [256]
-    # # for model__layer5_in in [128]
-    #
-    # for model__inner_layers in [[512, 512, 256, 128]]
-    #
-    # for model__dropout in [0.3]
-    #
-    # for model__activation_func in ["elu"]
-    #
-    # for loss_name in ["medae"]
-    #
-    # for remove_nan_samples_perc in [10]
-    #
-    # for test_ratio in [0.2]
-
-    # ------------------------------------------------------
-
-    # for imputation_strategy in ["median"]
-    for imputation_strategy in ["mean", "median"]
-
-    for max_epochs in [999]
-    # for max_epochs in [2]
+    # for max_epochs in [2, 3]
+    for max_epochs in [3, 2]
 
     # for batch_size in [32]
     # for batch_size in [32, 64]
-    for batch_size in [16, 32, 64]
+    for batch_size in [64, 32]
+    # for batch_size in [16, 32, 64, 128, 256, 512, 1024]
 
-    for lr_init in [0.001, 0.00001]
+    for lr_init in [0.0001]
 
-    for lr_factor in [0.1, 0.5]
+    for lr_factor in [0.1]
 
-    for lr_patience in [10, 50]
+    for lr_patience in [10]
 
-    for lr_threshold in [0.001, 1.0]
+    for lr_threshold in [0.001]
 
-    for early_stop_patience in [30, 100]
+    for early_stop_patience in [20]
 
-    for early_stop_threshold in [0.001, 1.0]
+    for early_stop_threshold in [0.0001]
 
-    for model__inner_layers in [
-        [512, 128],
-        [512, 512, 256, 128],
-        [512, 512, 256, 256, 128, 64],
-        [1024, 512, 256, 128, 64, 32, 16, 8],
-    ]
+    for model__input_dim in [1000]
 
-    for model__dropout in [0.1, 0.3]
+    # for model__layer2_in in [512]
+    # for model__layer3_in in [512]
+    # for model__layer4_in in [256]
+    # for model__layer5_in in [128]
 
-    for model__activation_func in ["elu", "relu"]
+    for model__inner_layers in [[512, 512, 256, 128]]
+
+    for model__dropout in [0.3]
+
+    for model__activation_func in ["elu"]
 
     for loss_name in ["medae"]
 
-    for remove_nan_samples_perc in [10, 30]
+    for remove_nan_samples_perc in [10]
 
     for test_ratio in [0.2]
+
+    # ------------------------------------------------------
+
+    # # for imputation_strategy in ["median"]
+    # for imputation_strategy in ["mean", "median"]
+    #
+    # for max_epochs in [999]
+    # # for max_epochs in [2]
+    #
+    # # for batch_size in [32]
+    # # for batch_size in [32, 64]
+    # for batch_size in [16, 32, 64]
+    #
+    # for lr_init in [0.001, 0.00001]
+    #
+    # for lr_factor in [0.1, 0.5]
+    #
+    # for lr_patience in [10, 50]
+    #
+    # for lr_threshold in [0.001, 1.0]
+    #
+    # for early_stop_patience in [30, 100]
+    #
+    # for early_stop_threshold in [0.001, 1.0]
+    #
+    # for model__inner_layers in [
+    #     [512, 128],
+    #     [512, 512, 256, 128],
+    #     [512, 512, 256, 256, 128, 64],
+    #     [1024, 512, 256, 128, 64, 32, 16, 8],
+    # ]
+    #
+    # for model__dropout in [0.1, 0.3]
+    #
+    # for model__activation_func in ["elu", "relu"]
+    #
+    # for loss_name in ["medae"]
+    #
+    # for remove_nan_samples_perc in [10, 30]
+    #
+    # for test_ratio in [0.2]
 
 ]
 
@@ -165,6 +167,8 @@ def main():
     best_predictor = None
     print(f"Running '{len(configs)}' train pipelines...")
     for config in configs:
+        set_seeds()  # Reset the seeds for reproducibility.
+
         predictor_class_name = config["predictor_class"]
         predictor = globals()[predictor_class_name](config)
         config_id = predictor.get_config_id()
@@ -172,9 +176,9 @@ def main():
 
         train_pipe_dt = datetime.now()
         result = predictor.train_pipeline()
-        train_pipe_runtime = datetime.now() - train_pipe_dt
-        result = {"train_pipe_runtime": train_pipe_runtime, **result}
-        print(f"Train pipeline runtime for '{config_id}': {train_pipe_runtime}")
+        pipeline_runtime = datetime.now() - train_pipe_dt
+        result = {"pipeline_runtime": pipeline_runtime, **result}
+        print(f"Train pipeline runtime for '{config_id}': {pipeline_runtime}")
 
         result_df_dt = datetime.now()
         # 1 Update result_df
