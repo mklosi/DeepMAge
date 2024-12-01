@@ -56,88 +56,87 @@ main_args_list = [
 
     # ------------------------------------------------------
 
-    # for imputation_strategy in ["median"]
-    for imputation_strategy in ["median", "mean"]
-
-    # for max_epochs in [9999]
-    for max_epochs in [2]
-
-    # for batch_size in [32]
-    for batch_size in [32, 64]
-    # for batch_size in [16, 32, 64, 128, 256, 512, 1024]
-
-    for lr_init in [0.0001]
-
-    for lr_factor in [0.1]
-
-    for lr_patience in [10]
-
-    for lr_threshold in [0.001]
-
-    for early_stop_patience in [20]
-
-    for early_stop_threshold in [0.0001]
-
-    for model__input_dim in [1000]
-
-    # for model__layer2_in in [512]
-    # for model__layer3_in in [512]
-    # for model__layer4_in in [256]
-    # for model__layer5_in in [128]
-
-    for model__inner_layers in [[512, 512, 256, 128]]
-
-    for model__dropout in [0.3]
-
-    for model__activation_func in ["elu"]
-
-    for loss_name in ["medae"]
-
-    for remove_nan_samples_perc in [10]
-
-    for test_ratio in [0.2]
-
-    # ------------------------------------------------------
-
     # # for imputation_strategy in ["median"]
-    # for imputation_strategy in ["mean", "median"]
+    # for imputation_strategy in ["median", "mean"]
     #
-    # for max_epochs in [999]
-    # # for max_epochs in [2]
+    # # for max_epochs in [9999]
+    # for max_epochs in [2]
     #
     # # for batch_size in [32]
-    # # for batch_size in [32, 64]
-    # for batch_size in [16, 32, 64, 1024]
+    # for batch_size in [32, 64]
+    # # for batch_size in [16, 32, 64, 128, 256, 512, 1024]
     #
-    # for lr_init in [0.001, 0.0001, 0.00001]
+    # for lr_init in [0.0001]
     #
-    # for lr_factor in [0.1, 0.5]
+    # for lr_factor in [0.1]
     #
-    # for lr_patience in [10, 20, 50]
+    # for lr_patience in [10]
     #
-    # for lr_threshold in [0.0001, 0.01, 1.0]
+    # for lr_threshold in [0.001]
     #
-    # for early_stop_patience in [20, 50, 100]
+    # for early_stop_patience in [20]
     #
-    # for early_stop_threshold in [0.0001, 0.01, 1.0]
+    # for early_stop_threshold in [0.0001]
     #
-    # for model__layer2_in in [512]
+    # for model__input_dim in [1000]
     #
-    # for model__layer3_in in [512]
+    # # for model__layer2_in in [512]
+    # # for model__layer3_in in [512]
+    # # for model__layer4_in in [256]
+    # # for model__layer5_in in [128]
     #
-    # for model__layer4_in in [256]
+    # for model__inner_layers in [[512, 512, 256, 128]]
     #
-    # for model__layer5_in in [128]
+    # for model__dropout in [0.3]
     #
-    # for model__dropout in [0.1, 0.3, 0.5]
-    #
-    # for model__activation_func in ["elu", "relu"]
+    # for model__activation_func in ["elu"]
     #
     # for loss_name in ["medae"]
     #
-    # for remove_nan_samples_perc in [10, 20]
+    # for remove_nan_samples_perc in [10]
     #
     # for test_ratio in [0.2]
+
+    # ------------------------------------------------------
+
+    # for imputation_strategy in ["median"]
+    for imputation_strategy in ["mean", "median"]
+
+    for max_epochs in [999]
+    # for max_epochs in [2]
+
+    # for batch_size in [32]
+    # for batch_size in [32, 64]
+    for batch_size in [16, 32, 64]
+
+    for lr_init in [0.001, 0.00001]
+
+    for lr_factor in [0.1, 0.5]
+
+    for lr_patience in [10, 50]
+
+    for lr_threshold in [0.001, 1.0]
+
+    for early_stop_patience in [30, 100]
+
+    for early_stop_threshold in [0.001, 1.0]
+
+    for model__inner_layers in [
+        [512, 128],
+        [512, 512, 256, 128],
+        [512, 512, 256, 256, 128, 64],
+        [1024, 512, 256, 128, 64, 32, 16, 8],
+    ]
+
+    for model__dropout in [0.1, 0.3]
+
+    for model__activation_func in ["elu", "relu"]
+
+    for loss_name in ["medae"]
+
+    for remove_nan_samples_perc in [10, 30]
+
+    for test_ratio in [0.2]
 
 ]
 

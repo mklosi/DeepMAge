@@ -293,8 +293,22 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         metadata_df, methyl_df = self.split_df(df)
 
-        # Make sure all values are numeric. Without this we were having issues with the 'mean' imputation strategy.
-        methyl_df = methyl_df.apply(pd.to_numeric, errors='coerce')
+        # &&&
+
+        # # Make sure all values are numeric. Without this we were having issues with the 'mean' imputation strategy.
+        # methyl_df = methyl_df.apply(pd.to_numeric, errors='coerce')
+
+        # methyl_df = methyl_df.replace({pd.NA: np.nan, None: np.nan})
+        # methyl_df = methyl_df.astype("float32")
+        # methyl_df = methyl_df.fillna(np.nan)
+        #
+        # print("NumPy version:", np.__version__)
+        # print("Pandas version:", pd.__version__)
+
+        # import sys
+        # sys.exit()
+
+        # &&& end
 
         ## impute #$ docs
         if is_training:
