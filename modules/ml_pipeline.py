@@ -1,12 +1,21 @@
 import json
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 
 from modules.memory import Memory
-from modules.ml_common import merge_dicts
+from modules.ml_common import merge_dicts, get_config_id
 # noinspection PyUnresolvedReferences
 from modules.ml_option_3 import DeepMAgePredictor, set_seeds
+
+pd.set_option('display.max_columns', 8)
+pd.set_option('display.min_rows', 10)
+pd.set_option('display.max_rows', 10)
+pd.set_option('display.max_colwidth', None)
+pd.set_option('display.width', None)
+
+default_loss_name = "medae"
 
 default_args_dict = {
     "predictor_class": "DeepMAgePredictor",
@@ -14,6 +23,7 @@ default_args_dict = {
         "model_class": "DeepMAgeModel",
         "input_dim": 1000,
     },
+    "loss_name": default_loss_name,
 }
 
 main_args_list = [
@@ -49,7 +59,6 @@ main_args_list = [
             "dropout": model__dropout,
             "activation_func": model__activation_func,
         },
-        "loss_name": loss_name,
         "remove_nan_samples_perc": remove_nan_samples_perc,
         "test_ratio": test_ratio,
     }
@@ -59,13 +68,13 @@ main_args_list = [
     for imputation_strategy in ["median"]
 
     # for max_epochs in [9999]
-    # for max_epochs in [2]
+    # for max_epochs in [4]
     # for max_epochs in [2, 3]
-    for max_epochs in [3, 2]
+    for max_epochs in [5, 4, 3, 2]
 
     # for batch_size in [32]
-    # for batch_size in [32, 64]
-    for batch_size in [64, 32]
+    for batch_size in [32, 64, 128]
+    # for batch_size in [64, 32]
     # for batch_size in [16, 32, 64, 128, 256, 512, 1024]
 
     for lr_init in [0.0001]
@@ -92,8 +101,6 @@ main_args_list = [
     for model__dropout in [0.3]
 
     for model__activation_func in ["elu"]
-
-    for loss_name in ["medae"]
 
     for remove_nan_samples_perc in [10]
 
@@ -134,8 +141,6 @@ main_args_list = [
     #
     # for model__activation_func in ["elu", "relu"]
     #
-    # for loss_name in ["medae"]
-    #
     # for remove_nan_samples_perc in [10, 30]
     #
     # for test_ratio in [0.2]
@@ -143,13 +148,10 @@ main_args_list = [
 ]
 
 
-def main():
+def main(override, overwrite):
 
     mem = Memory(noop=False)
     start_dt = datetime.now()
-
-    start_dt_iso = start_dt.isoformat()
-    result_df_path = f"result_artifacts/result_{start_dt_iso}.parquet"
 
     seen = set()
     main_args_json_ls = [json.dumps(dict_) for dict_ in main_args_list]
@@ -162,53 +164,78 @@ def main():
         merged_dict = merge_dicts(default_args_dict, main_args_dict)
         configs.append(merged_dict)
 
-    result_df = pd.DataFrame()
-    best_loss = float('inf')
-    best_predictor = None
-    print(f"Running '{len(configs)}' train pipelines...")
+    result_df_path = Path(f"result_artifacts/result_df.parquet")
+    if result_df_path.exists() and not overwrite:
+        result_df = pd.read_parquet(result_df_path)
+        best_ser = result_df.sort_values(by=default_loss_name).iloc[0]
+        best_loss = best_ser[default_loss_name]
+        config = json.loads(best_ser["config"])
+        predictor_class_name = config["predictor_class"]
+        predictor_class = globals()[predictor_class_name]
+        best_predictor = predictor_class(config)
+    else:
+        result_df = pd.DataFrame()
+        best_loss = float('inf')
+        best_predictor = None
+
+    print(f"Found '{len(configs)}' total configs.")
+    configs = [config for config in configs if override or get_config_id(config) not in result_df.index]
+    print(f"Running '{len(configs)}' new train pipelines...")
+
     for config in configs:
         set_seeds()  # Reset the seeds for reproducibility.
+        config_id = get_config_id(config)
 
-        predictor_class_name = config["predictor_class"]
-        predictor = globals()[predictor_class_name](config)
-        config_id = predictor.get_config_id()
         print(f"--- Train pipeline for config_id: {config_id} --------------------------------------------")
+        predictor_class_name = config["predictor_class"]
+        predictor_class = globals()[predictor_class_name]
+        predictor = predictor_class(config)
 
         train_pipe_dt = datetime.now()
-        result = predictor.train_pipeline()
+        result_dict = predictor.train_pipeline()
         pipeline_runtime = datetime.now() - train_pipe_dt
-        result = {"pipeline_runtime": pipeline_runtime, **result}
         print(f"Train pipeline runtime for '{config_id}': {pipeline_runtime}")
 
-        result_df_dt = datetime.now()
-        # 1 Update result_df
-        curr_df = pd.DataFrame([result])
-        result_df = pd.concat([result_df, curr_df])
-        # 2 Update result_df
-        # &&&
-        print(f"result_df create runtime: {datetime.now() - result_df_dt}")
-
-        result_df = result_df.sort_values(by=predictor.config["loss_name"])
-        print(f"result_df:\n{result_df.head(5)}")
-
-        # result_df.to_parquet(result_df_path, engine='pyarrow', index=False)
-        # print(f"Saved result_df to: {result_df_path}")
+        # # &&&
+        # predictor.save()
 
         # Keep track of the best predictor so far.
-        curr_loss = result[config["loss_name"]]
+        curr_loss = result_dict[config["loss_name"]]
         if curr_loss < best_loss:
             best_loss = curr_loss
             print("Found better loss. Swapping best_predictor...")
+
             predictor.save()
             if best_predictor is not None:
                 best_predictor.delete()
+
             best_predictor = predictor
 
+        result_dict = {
+            "config_id": config_id,
+            "start_dt": start_dt,
+            "pipeline_runtime": pipeline_runtime,
+            **result_dict,
+            "config": json.dumps(config),
+        }
+        curr_df = pd.DataFrame([result_dict]).set_index("config_id")
+        result_df = pd.concat([result_df, curr_df])
+
+        result_df = result_df.sort_values(by=default_loss_name)
+        print(f"result_df:\n{result_df.drop(columns='config')}")
+
+        result_df.to_parquet(result_df_path, engine='pyarrow', index=True)
+        print(f"Saved result_df to: {result_df_path}")
+
     print(f"--- End of '{len(configs)}' train pipelines -----------------------------------------------------------")
+
+    # &&&
+    result_df = result_df.sort_values(by=default_loss_name)
+    print(f"result_df:\n{result_df.drop(columns='config')}")
 
     mem.log_memory(print, "ml_pipeline_end")
     print(f"Total runtime: {datetime.now() - start_dt}")
 
 
 if __name__ == "__main__":
-    main()
+    main(override=False, overwrite=False)

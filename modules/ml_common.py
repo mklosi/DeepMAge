@@ -2,12 +2,20 @@ from datetime import datetime
 import joblib
 import pandas as pd
 import torch
+import json
+import hashlib
 from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 
 print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
 print(f"torch.backends.mps.is_available(): {torch.backends.mps.is_available()}")
+
+
+def get_config_id(config): # &&& maybe move to DeepMAgeBase
+    config_json = json.dumps(config)
+    config_id = hashlib.md5(config_json.encode("utf8")).hexdigest()
+    return config_id
 
 
 def merge_dicts(dict1, dict2):

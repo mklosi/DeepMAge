@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from modules.memory import Memory
-from modules.ml_common import DeepMAgeBase, MethylationDataset, DataLoader
+from modules.ml_common import DeepMAgeBase, MethylationDataset, DataLoader, get_config_id
 from datetime import datetime
 
 mem = Memory(noop=False)
@@ -183,23 +183,17 @@ class DeepMAgePredictor(DeepMAgeBase):
         }
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config["lr_init"])
 
-    def get_config_id(self):
-        config_json = json.dumps(self.config, indent=4) # &&& indent.
-        config_id = hashlib.md5(config_json.encode("utf8")).hexdigest()
-        return config_id
-
     def load(self):
         """Load the entire DeepMAgePredictor object."""
 
-        config_id = self.get_config_id()
+        config_id = get_config_id(self.config)
         predictor_path = f"{self.predictor_base_dir}/{config_id}.predictor"
         with open(predictor_path, 'rb') as f:
             state = joblib.load(f)
-        instance = state["predictor_state"]
-        instance.model.load_state_dict(state["model_state_dict"])
-        instance.optimizer.load_state_dict(state["optimizer_state_dict"])
+        self.__dict__.update(state["predictor_state"].__dict__)
+        self.model.load_state_dict(state["model_state_dict"])
+        self.optimizer.load_state_dict(state["optimizer_state_dict"])
         print(f"'{self.__class__.__name__}' loaded from: {predictor_path}")
-        return instance
 
     def save(self):
         """Save the entire DeepMAgePredictor object."""
@@ -209,7 +203,7 @@ class DeepMAgePredictor(DeepMAgeBase):
             "optimizer_state_dict": self.optimizer.state_dict(),
             "predictor_state": self,
         }
-        config_id = self.get_config_id()
+        config_id = get_config_id(self.config)
         predictor_path = f"{self.predictor_base_dir}/{config_id}.predictor"
         with open(predictor_path, 'wb') as f:
             joblib.dump(state, f)
@@ -217,7 +211,7 @@ class DeepMAgePredictor(DeepMAgeBase):
 
     def delete(self):
         """Delete the saved artifact for this predictor to save money."""
-        config_id = self.get_config_id()
+        config_id = get_config_id(self.config)
         predictor_path = Path(f"{self.predictor_base_dir}/{config_id}.predictor")
         predictor_path.unlink(missing_ok=True)
         print(f"Deleted predictor at: {predictor_path}")
@@ -505,13 +499,12 @@ class DeepMAgePredictor(DeepMAgeBase):
         # self.save_predictor()
 
         # Loading a Saved Model and test again.
-        # predictor = self.load_predictor()
+        # self.load()
         # Make sure that even if we shuffle test_df, we still get the same metrics.
         # test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
 
         result_dict = self.test_(test_df)
 
-        result_dict = {"config_id": self.get_config_id(), **result_dict}
         return result_dict
 
         # ## Make a prediction
