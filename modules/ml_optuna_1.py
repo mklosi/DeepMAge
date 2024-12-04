@@ -7,9 +7,11 @@ from hyperopt import hp
 import pandas as pd
 import optuna
 from hyperopt import Trials
+from optuna.samplers import GridSampler, TPESampler
+from torch.onnx.symbolic_opset16 import grid_sampler
+
 from modules.memory import Memory
 from modules.ml_common import merge_dicts, get_config_id
-from modules.ml_hyperopt import search_space
 # noinspection PyUnresolvedReferences
 from modules.ml_option_3 import DeepMAgePredictor, set_seeds
 
@@ -23,10 +25,9 @@ pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', None)
 
 results_base_path = "result_artifacts"  # &&& this should be somewhere else.
-
-study_name = "optuna-study-1"
-study_path = Path(f"{results_base_path}/{study_name}.pkl")
 result_df_path = Path(f"{results_base_path}/result_df_optuna_1.parquet")
+study_name = f"study_optuna_1"
+study_path = Path(f"{results_base_path}/{study_name}.pkl")
 
 # default_loss_name = "mae"
 default_loss_name = "medae"
@@ -40,8 +41,13 @@ default_args_dict = {
 
 search_space = {
     "imputation_strategy": ["median"],
+
+    # "max_epochs": [4],
     "max_epochs": [2, 3],
+
+    # "batch_size": [32],
     "batch_size": [32, 64],
+    # "batch_size": [64, 32],
     "lr_init": [0.0001],
     "weight_decay": [0.0],
     "lr_factor": [0.1],
@@ -61,8 +67,12 @@ def objective(trial):
 
     hyperparams = {param: trial.suggest_categorical(param, choices) for param, choices in search_space.items()}
     config = merge_dicts(default_args_dict, hyperparams)
+    config_id = get_config_id(config)
 
     set_seeds()  # Reset seeds for reproducibility
+
+    print(f"--- Train pipeline for config_id: {config_id} --------------------------------------------")
+    # print(f"config:\n{json.dumps(config, indent=4)}")
     predictor_class_name = config["predictor_class"]
     predictor_class = globals()[predictor_class_name]
     predictor = predictor_class(config)
@@ -71,7 +81,7 @@ def objective(trial):
 
     # Attach custom attributes
     trial.set_user_attr("config", config)
-    trial.set_user_attr("config_id", get_config_id(config))
+    trial.set_user_attr("config_id", config_id)
     trial.set_user_attr("mae", result_dict["mae"])
     trial.set_user_attr("medae", result_dict["medae"])
     trial.set_user_attr("mse", result_dict["mse"])
@@ -82,28 +92,6 @@ def objective(trial):
 
 # noinspection PyUnusedLocal
 def save_study_callback(study, trial):
-    joblib.dump(study, study_path)
-    print(f"Saved study '{study.study_name}' to: {study_path}")
-
-
-def main(overwrite):
-
-    mem = Memory(noop=False)
-    start_dt = datetime.now()
-
-    if study_path.exists() and not overwrite:
-        study = joblib.load(study_path)
-    else:
-        sampler = optuna.samplers.GridSampler(search_space, seed=42)
-        study = optuna.create_study(study_name=study_name, direction="minimize", sampler=sampler)
-
-    study.optimize(objective, n_trials=None, timeout=3600, callbacks=[save_study_callback])
-
-    # Get the best trial
-    best_trial = study.best_trial
-    print("Best trial:")
-    print(f"  Value: {best_trial.value}")
-    print(f"  Params: {best_trial.params}")
 
     result_df = study.trials_dataframe()
 
@@ -126,6 +114,43 @@ def main(overwrite):
 
     result_df.to_parquet(result_df_path, engine='pyarrow', index=False)
     print(f"Saved result_df to: {result_df_path}")
+
+    joblib.dump(study, study_path)
+    print(f"Saved study '{study.study_name}' to: {study_path}")
+
+
+def main(overwrite):
+
+    mem = Memory(noop=False)
+    start_dt = datetime.now()
+
+    if study_path.exists() and not overwrite:
+        study = joblib.load(study_path)
+        sampler = study.sampler
+    else:
+        # sampler = GridSampler(search_space, seed=42)
+        sampler = TPESampler(seed=42)
+
+        study = optuna.create_study(study_name=study_name, direction="minimize", sampler=sampler)
+
+    if not isinstance(sampler, TPESampler):
+        # noinspection PyProtectedMember
+        config_count = len(sampler._all_grids)
+        print(f"Found '{config_count}' total configs.")
+        completed_trials = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
+        remaining_trials = config_count - completed_trials
+        print(f"Running '{remaining_trials}' new train pipelines...")
+
+        # assert sampler.is_exhausted(study) == (completed_trials == config_count) # &&&
+
+    if isinstance(sampler, TPESampler) or not sampler.is_exhausted(study):
+        study.optimize(objective, n_trials=None, timeout=3600, callbacks=[save_study_callback])
+
+    # Get the best trial
+    best_trial = study.best_trial  # &&& do we need this?
+    print("Best trial:")
+    print(f"  Value: {best_trial.value}")
+    print(f"  Params: {best_trial.params}")
 
     mem.log_memory(print, "ml_pipeline_end")
     print(f"Total runtime: {datetime.now() - start_dt}")
