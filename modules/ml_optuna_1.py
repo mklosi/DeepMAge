@@ -19,14 +19,6 @@ pd.set_option('display.max_rows', 10)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', None)
 
-# &&& param
-results_base_path = "result_artifacts_temp"
-# results_base_path = "result_artifacts"
-
-result_df_path = Path(f"{results_base_path}/result_df_optuna_1.parquet")
-study_name = f"study_optuna_1"
-study_path = Path(f"{results_base_path}/{study_name}.pkl")
-
 # default_loss_name = "mae"
 default_loss_name = "medae"
 
@@ -39,64 +31,69 @@ default_args_dict = {
 
 # &&& param search_space
 
+# search_space = {
+#     "imputation_strategy": ["median"],
+#
+#     # "max_epochs": [4],
+#     "max_epochs": [2, 3],
+#
+#     # "batch_size": [32],
+#     # "batch_size": [32, 64],
+#     "batch_size": [64, 32],
+#     "lr_init": [0.0001],
+#     "weight_decay": [0.0],
+#     "lr_factor": [0.1],
+#     "lr_patience": [10],
+#     "lr_threshold": [0.01],
+#     "early_stop_patience": [20],
+#     "early_stop_threshold": [0.0001],
+#     "model.inner_layers": [json.dumps([512, 512, 256, 128])],
+#     "model.dropout": [0.3],
+#     "model.activation_func": ["elu"],
+#     "remove_nan_samples_perc": [10],
+#     "test_ratio": [0.2],
+# }
+
 search_space = {
-    "imputation_strategy": ["median"],
+    "imputation_strategy": ["mean", "median"],
 
-    # "max_epochs": [4],
-    "max_epochs": [2, 3],
+    "max_epochs": [999],
 
-    # "batch_size": [32],
-    "batch_size": [32, 64],
-    # "batch_size": [64, 32],
-    "lr_init": [0.0001],
-    "weight_decay": [0.0],
-    "lr_factor": [0.1],
-    "lr_patience": [10],
-    "lr_threshold": [0.01],
-    "early_stop_patience": [20],
-    "early_stop_threshold": [0.0001],
-    "model.inner_layers": [json.dumps([512, 512, 256, 128])],
-    "model.dropout": [0.3],
-    "model.activation_func": ["elu"],
-    "remove_nan_samples_perc": [10],
+    "batch_size": [16, 32, 64],
+
+    "lr_init": [0.001, 0.00001],
+
+    "weight_decay": [0.0, 0.001],
+
+    "lr_factor": [0.1, 0.5],
+
+    "lr_patience": [10, 50],
+
+    "lr_threshold": [0.001, 1.0],
+
+    "early_stop_patience": [30, 100],
+
+    "early_stop_threshold": [0.001, 1.0],
+
+    "model.inner_layers": [
+        json.dumps([512, 512, 256, 128]),
+        json.dumps([512, 512, 256, 256, 128, 64]),
+        json.dumps([1024, 512, 256, 128, 64, 32, 16, 8]),
+    ],
+
+    "model.dropout": [0.1, 0.3],
+
+    "model.activation_func": ["elu", "relu"],
+
+    "remove_nan_samples_perc": [10, 30],
+
     "test_ratio": [0.2],
 }
 
-# search_space = {
-#     "imputation_strategy": ["mean", "median"],
-#
-#     "max_epochs": [999],
-#
-#     "batch_size": [16, 32, 64],
-#
-#     "lr_init": [0.001, 0.00001],
-#
-#     "weight_decay": [0.0, 0.001],
-#
-#     "lr_factor": [0.1, 0.5],
-#
-#     "lr_patience": [10, 50],
-#
-#     "lr_threshold": [0.001, 1.0],
-#
-#     "early_stop_patience": [30, 100],
-#
-#     "early_stop_threshold": [0.001, 1.0],
-#
-#     "model.inner_layers": [
-#         json.dumps([512, 512, 256, 128]),
-#         json.dumps([512, 512, 256, 256, 128, 64]),
-#         json.dumps([1024, 512, 256, 128, 64, 32, 16, 8]),
-#     ],
-#
-#     "model.dropout": [0.1, 0.3],
-#
-#     "model.activation_func": ["elu", "relu"],
-#
-#     "remove_nan_samples_perc": [10, 30],
-#
-#     "test_ratio": [0.2],
-# }
+results_base_path = "result_artifacts"
+result_df_path = Path(f"{results_base_path}/result_df.parquet")
+study_name = get_config_id(search_space)[:16]  # Half of actual length.
+study_path = Path(f"{results_base_path}/study_{study_name}.pkl")
 
 
 def objective(trial):
@@ -116,7 +113,7 @@ def objective(trial):
     result_dict = predictor.train_pipeline()
 
     # Attach custom attributes
-    trial.set_user_attr("config", config)
+    trial.set_user_attr("config", json.dumps(config))
     trial.set_user_attr("config_id", config_id)
     trial.set_user_attr("mae", result_dict["mae"])
     trial.set_user_attr("medae", result_dict["medae"])
@@ -165,8 +162,9 @@ def main(overwrite):
         sampler = study.sampler
     else:
         # &&& param
-        sampler = GridSampler(search_space, seed=42)
+        # sampler = GridSampler(search_space, seed=42)
         # sampler = TPESampler(seed=42)
+        sampler = TPESampler(seed=42, multivariate=True)
 
         study = optuna.create_study(study_name=study_name, direction="minimize", sampler=sampler)
 
@@ -193,7 +191,7 @@ def main(overwrite):
             # n_jobs=20,
 
             callbacks=[save_study_callback],
-            show_progress_bar=True,
+            # show_progress_bar=True,
         )
 
     # Get the best trial

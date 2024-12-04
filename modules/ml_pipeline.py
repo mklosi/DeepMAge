@@ -128,6 +128,8 @@ main_args_list = [
 
     for lr_init in [0.001, 0.00001]
 
+    for weight_decay in [0.0]
+
     for lr_factor in [0.1, 0.5]
 
     for lr_patience in [10, 50]
