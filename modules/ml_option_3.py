@@ -166,6 +166,7 @@ class DeepMAgePredictor(DeepMAgeBase):
 
     def __init__(self, config):
         self.config = config
+        self.config_id = get_config_id(self.config)
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else
             "mps" if torch.backends.mps.is_available()
@@ -194,8 +195,7 @@ class DeepMAgePredictor(DeepMAgeBase):
     def load(self):
         """Load the entire DeepMAgePredictor object."""
 
-        config_id = get_config_id(self.config)
-        predictor_path = f"{self.predictor_base_dir}/{config_id}.predictor"
+        predictor_path = f"{self.predictor_base_dir}/{self.config_id}.predictor"
         with open(predictor_path, 'rb') as f:
             state = joblib.load(f)
         self.__dict__.update(state["predictor_state"].__dict__)
@@ -211,16 +211,14 @@ class DeepMAgePredictor(DeepMAgeBase):
             "optimizer_state_dict": self.optimizer.state_dict(),
             "predictor_state": self,
         }
-        config_id = get_config_id(self.config)
-        predictor_path = f"{self.predictor_base_dir}/{config_id}.predictor"
+        predictor_path = f"{self.predictor_base_dir}/{self.config_id}.predictor"
         with open(predictor_path, 'wb') as f:
             joblib.dump(state, f)
         print(f"'{self.__class__.__name__}' saved to: {predictor_path}")
 
     def delete(self):
         """Delete the saved artifact for this predictor to save money."""
-        config_id = get_config_id(self.config)
-        predictor_path = Path(f"{self.predictor_base_dir}/{config_id}.predictor")
+        predictor_path = Path(f"{self.predictor_base_dir}/{self.config_id}.predictor")
         predictor_path.unlink(missing_ok=True)
         print(f"Deleted predictor at: {predictor_path}")
 
@@ -397,10 +395,11 @@ class DeepMAgePredictor(DeepMAgeBase):
 
             val_loss = self.validate(val_loader)
             print(
+                f"config_id '{self.config_id}', "
                 f"Epoch '{epoch+1}/{self.config['max_epochs']}', "
                 f"lr: '{round(lr_scheduler.get_last_lr()[0], 10)}', "
-                f"Training Loss: {epoch_loss / len(train_loader)}, "
-                f"Validation Loss: {val_loss}"
+                f"Train Loss: {epoch_loss / len(train_loader):,.6f}, "
+                f"Val Loss: {val_loss:,.6f}"
             )
 
             # Learning rate scheduler
