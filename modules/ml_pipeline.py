@@ -15,6 +15,7 @@ pd.set_option('display.max_rows', 10)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', None)
 
+# default_loss_name = "mae"
 default_loss_name = "medae"
 
 default_args_dict = {
@@ -33,6 +34,7 @@ main_args_list = [
         "max_epochs": max_epochs,
         "batch_size": batch_size,
         "lr_init": lr_init,
+        "weight_decay": weight_decay,  # Add L2 regularization.
         "lr_factor": lr_factor,
         "lr_patience": lr_patience,
         "lr_threshold": lr_threshold,  # Bigger values make lr change faster.
@@ -65,84 +67,122 @@ main_args_list = [
 
     # ------------------------------------------------------
 
-    # for imputation_strategy in ["median"]
-    #
-    # # for max_epochs in [9999]
+    for imputation_strategy in ["median"]
+
+    # for max_epochs in [9999]
     # for max_epochs in [2]
-    # # for max_epochs in [2, 3]
-    # # for max_epochs in [5, 4, 3, 2]
-    #
+    for max_epochs in [2, 3]
+    # for max_epochs in [5, 4, 3, 2]
+
     # for batch_size in [32]
-    # # for batch_size in [32, 64, 128]
-    # # for batch_size in [64, 32]
+    for batch_size in [64, 32]
+
+    for lr_init in [0.0001]
+
+    for weight_decay in [0.0]
+
+    for lr_factor in [0.1]
+
+    for lr_patience in [10]
+
+    for lr_threshold in [0.001]
+
+    for early_stop_patience in [20]
+
+    for early_stop_threshold in [0.0001]
+
+    for model__input_dim in [1000]
+
+    # for model__layer2_in in [512]
+    # for model__layer3_in in [512]
+    # for model__layer4_in in [256]
+    # for model__layer5_in in [128]
+
+    for model__inner_layers in [[512, 512, 256, 128]]
+
+    for model__dropout in [0.3]
+
+    for model__activation_func in ["elu"]
+
+    for remove_nan_samples_perc in [10]
+
+    for test_ratio in [0.2]
+
+    # # ------------------------------------------------------
     #
-    # for lr_init in [0.0001]
+    # for model__inner_layers in [
+    #     [512, 512, 256, 128],
+    #     [512, 512, 256, 256, 128, 64],
+    #     [1024, 512, 256, 128, 64, 32, 16, 8],
+    # ]
     #
-    # for lr_factor in [0.1]
+    # # for imputation_strategy in ["median"]
+    # for imputation_strategy in ["mean", "median"]
     #
-    # for lr_patience in [10]
+    # for max_epochs in [999]
+    # # for max_epochs in [2]
     #
-    # for lr_threshold in [0.001]
+    # # for batch_size in [32]
+    # # for batch_size in [32, 64]
+    # for batch_size in [16, 32, 64]
     #
-    # for early_stop_patience in [20]
+    # for lr_init in [0.001, 0.00001]
     #
-    # for early_stop_threshold in [0.0001]
+    # for lr_factor in [0.1, 0.5]
     #
-    # for model__input_dim in [1000]
+    # for lr_patience in [10, 50]
     #
-    # # for model__layer2_in in [512]
-    # # for model__layer3_in in [512]
-    # # for model__layer4_in in [256]
-    # # for model__layer5_in in [128]
+    # for lr_threshold in [0.001, 1.0]
     #
-    # for model__inner_layers in [[512, 512, 256, 128]]
+    # for early_stop_patience in [30, 100]
     #
-    # for model__dropout in [0.3]
+    # for early_stop_threshold in [0.001, 1.0]
     #
-    # for model__activation_func in ["elu"]
+    # for model__dropout in [0.1, 0.3]
     #
-    # for remove_nan_samples_perc in [10]
+    # for model__activation_func in ["elu", "relu"]
+    #
+    # for remove_nan_samples_perc in [10, 30]
     #
     # for test_ratio in [0.2]
 
     # ------------------------------------------------------
 
+    # for model__inner_layers in [
+    #     [512, 512, 512, 512, 512],
+    # ]
+    #
+    # # for imputation_strategy in ["median"]
     # for imputation_strategy in ["median"]
-    for imputation_strategy in ["mean", "median"]
-
-    for max_epochs in [999]
-    # for max_epochs in [2]
-
+    #
+    # for max_epochs in [999]
+    # # for max_epochs in [2]
+    #
+    # # for batch_size in [32]
+    # # for batch_size in [32, 64]
     # for batch_size in [32]
-    # for batch_size in [32, 64]
-    for batch_size in [16, 32, 64]
-
-    for lr_init in [0.001, 0.00001]
-
-    for lr_factor in [0.1, 0.5]
-
-    for lr_patience in [10, 50]
-
-    for lr_threshold in [0.001, 1.0]
-
-    for early_stop_patience in [30, 100]
-
-    for early_stop_threshold in [0.001, 1.0]
-
-    for model__inner_layers in [
-        [512, 128],
-        [512, 512, 256, 128],
-        [512, 512, 256, 256, 128, 64],
-        [1024, 512, 256, 128, 64, 32, 16, 8],
-    ]
-
-    for model__dropout in [0.1, 0.3]
-
-    for model__activation_func in ["elu", "relu"]
-
-    for remove_nan_samples_perc in [10, 30]
-
-    for test_ratio in [0.2]
+    #
+    # for lr_init in [0.0001]
+    #
+    # for weight_decay in [1e-3]
+    #
+    # for lr_factor in [0.1]
+    #
+    # for lr_patience in [25]
+    #
+    # for lr_threshold in [0.01]
+    #
+    # for early_stop_patience in [50]
+    #
+    # for early_stop_threshold in [0.01]
+    #
+    # for model__dropout in [0.3]
+    #
+    # for model__activation_func in ["elu"]
+    #
+    # for remove_nan_samples_perc in [20]
+    #
+    # for test_ratio in [0.2]
 
 ]
 
@@ -151,6 +191,8 @@ def main(override, overwrite):
 
     mem = Memory(noop=False)
     start_dt = datetime.now()
+
+    result_df_path = Path(f"result_artifacts/result_df_temp.parquet")
 
     seen = set()
     main_args_json_ls = [json.dumps(dict_) for dict_ in main_args_list]
@@ -163,7 +205,6 @@ def main(override, overwrite):
         merged_dict = merge_dicts(default_args_dict, main_args_dict)
         configs.append(merged_dict)
 
-    result_df_path = Path(f"result_artifacts/result_df.parquet")
     if result_df_path.exists() and not overwrite:
         result_df = pd.read_parquet(result_df_path)
         best_ser = result_df.sort_values(by=default_loss_name).iloc[0]
@@ -181,11 +222,15 @@ def main(override, overwrite):
     configs = [config for config in configs if override or get_config_id(config) not in result_df.index]
     print(f"Running '{len(configs)}' new train pipelines...")
 
+    # &&& keep these for filtering.
+    config_ids_for_filtering = []
+
     for config in configs:
         set_seeds()  # Reset the seeds for reproducibility.
         config_id = get_config_id(config)
 
         print(f"--- Train pipeline for config_id: {config_id} --------------------------------------------")
+        print(f"config:\n{json.dumps(config, indent=4)}")
         predictor_class_name = config["predictor_class"]
         predictor_class = globals()[predictor_class_name]
         predictor = predictor_class(config)
@@ -221,6 +266,10 @@ def main(override, overwrite):
         result_df = pd.concat([result_df, curr_df])
         result_df = result_df.loc[~result_df.index.duplicated(keep='last')]
 
+        # &&&
+        config_ids_for_filtering.append(config_id)
+        result_df = result_df[result_df.index.isin(config_ids_for_filtering)]
+
         result_df = result_df.sort_values(by=default_loss_name)
         print(f"result_df:\n{result_df.drop(columns='config')}")
 
@@ -228,16 +277,6 @@ def main(override, overwrite):
         print(f"Saved result_df to: {result_df_path}")
 
     print(f"--- End of '{len(configs)}' train pipelines -----------------------------------------------------------")
-
-    # # &&&
-    # result_df = result_df[result_df.index.isin([
-    #     "0852e6b81d537666886de1b97c75e63e",
-    #     "bb152891966967e7f6c88b029e87cb27",
-    #     "5a30111efa755acbfe791fabf45ea716",
-    #     "83f14c25fab15bb61cb5b3b760e15923",
-    # ])]
-    # result_df = result_df.sort_values(by=default_loss_name)
-    # print(f"result_df:\n{result_df.drop(columns='config')}")
 
     mem.log_memory(print, "ml_pipeline_end")
     print(f"Total runtime: {datetime.now() - start_dt}")

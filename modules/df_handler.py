@@ -28,7 +28,8 @@ if __name__ == '__main__':
     # path = "resources/GSE125105_RAW_few/sample_sheet_meta_data.parquet"
     # path = "resources_methylprep/GSE102177_download_pandas_1.3.5/GPL13534/beta_values.pkl"
     # path = "resources_methylprep/GSE102177_download_pandas_1.3.5/GPL13534/GSE102177_GPL13534_meta_data.pkl"
-    path = Path(f"result_artifacts/result_df.parquet")
+    # path = Path(f"result_artifacts/result_df.parquet")
+    path = Path(f"result_artifacts/result_df_optuna_1.parquet")
 
     df = pd.read_parquet(path)
     # df = pd.read_pickle(path)
@@ -36,11 +37,13 @@ if __name__ == '__main__':
     # ## get sample_id_to_gsm_id
     # sample_id_to_gsm_id = df.set_index("Sample_ID")["GSM_ID"].to_dict()
 
-    # Find out the best config so far.
-    df = df.sort_values(by=default_loss_name)
-    ser = df.iloc[0]
-    loss = ser[default_loss_name]
-    config = json.loads(ser["config"])
+    # # Find out the best config so far.
+    # df = df.sort_values(by=default_loss_name)
+    # ser = df.iloc[0]
+    # loss = ser[default_loss_name]
+    # config = json.loads(ser["config"])
+
+    fjdkfjdk = 1
 
     df = df.round(3).astype(np.float32)
 

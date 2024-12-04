@@ -114,21 +114,25 @@ class DeepMAgeModel(nn.Module):
         super(DeepMAgeModel, self).__init__()
         self.config = config
 
+        inner_layers = self.config["model.inner_layers"]
+        if isinstance(inner_layers, str):
+            inner_layers = json.loads(inner_layers)
+
         # Dynamically create layers.
         self.fcs = nn.ModuleList()
-        self.fcs.append(nn.Linear(self.config["input_dim"], self.config["inner_layers"][0]))
-        previous_out = self.config["inner_layers"][0]
-        for inner_layer in self.config["inner_layers"][1:]:
+        self.fcs.append(nn.Linear(self.config["model.input_dim"], inner_layers[0]))
+        previous_out = inner_layers[0]
+        for inner_layer in inner_layers[1:]:
             self.fcs.append(nn.Linear(previous_out, inner_layer))
             previous_out = inner_layer
         self.fcs.append(nn.Linear(previous_out, 1))
 
-        self.dropout = nn.Dropout(self.config["dropout"])
+        self.dropout = nn.Dropout(self.config["model.dropout"])
         activation_funcs = {
             "elu": nn.ELU(),
             "relu": nn.ReLU(),
         }
-        self.activation_func = activation_funcs[self.config["activation_func"]]
+        self.activation_func = activation_funcs[self.config["model.activation_func"]]
 
     def forward(self, x):
         for i, fc in enumerate(self.fcs[:-1]):
@@ -169,9 +173,9 @@ class DeepMAgePredictor(DeepMAgeBase):
         )
         self.imputer = SimpleImputer(strategy=self.config["imputation_strategy"])
         self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))
-        model_class_name = config["model"]["model_class"]
+        model_class_name = config["model.model_class"]
         model_class = globals()[model_class_name]
-        self.model = model_class(config=self.config["model"]).to(self.device)
+        self.model = model_class(config=self.config).to(self.device)
 
         # # &&&
         # print(f"self.model: {self.model}")
@@ -181,7 +185,11 @@ class DeepMAgePredictor(DeepMAgeBase):
             "mae": nn.L1Loss(),  # Computes Mean Absolute Error (MAE)
             "medae": MedAELoss(),  # Computes Median Absolute Error (MedAE)
         }
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.config["lr_init"])
+        self.optimizer = optim.Adam(
+            self.model.parameters(),
+            lr=self.config["lr_init"],
+            weight_decay=self.config.get("weight_decay", 0.0),  # 0.0 is default.
+        )
 
     def load(self):
         """Load the entire DeepMAgePredictor object."""
@@ -281,7 +289,7 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         ## Remove samples with more than X perc nan values across all cpg sites.
         nan_counts = df.isna().sum(axis=1)  # Count NaNs per GSM ID
-        ten_perc = self.config["model"]["input_dim"] // self.config["remove_nan_samples_perc"]
+        ten_perc = self.config["model.input_dim"] // self.config["remove_nan_samples_perc"]
         gsm_ids_with_nans = nan_counts[nan_counts > ten_perc].index
         df = df[~df.index.isin(gsm_ids_with_nans)]
 
@@ -342,7 +350,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         return train_test_split(df, test_size=self.config["test_ratio"], random_state=42)
 
     def train(self, train_df):
-        print(f"Loss is '{self.config['loss_name']}'. Training model...")
+        print(f"Training model...")
         train_dt = datetime.now()
 
         train_data, val_data = self.split_data_by_percent(train_df)
