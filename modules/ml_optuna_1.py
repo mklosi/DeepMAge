@@ -10,7 +10,8 @@ from optuna.samplers import GridSampler, TPESampler
 
 from modules.memory import Memory
 from modules.ml_common import merge_dicts, get_config_id
-from modules.ml_option_3 import set_seeds
+# noinspection PyUnresolvedReferences
+from modules.ml_option_3 import DeepMAgePredictor, set_seeds
 
 pd.set_option('display.max_columns', 8)
 pd.set_option('display.min_rows', 10)
@@ -18,7 +19,10 @@ pd.set_option('display.max_rows', 10)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', None)
 
-results_base_path = "result_artifacts"
+# &&& param
+results_base_path = "result_artifacts_temp"
+# results_base_path = "result_artifacts"
+
 result_df_path = Path(f"{results_base_path}/result_df_optuna_1.parquet")
 study_name = f"study_optuna_1"
 study_path = Path(f"{results_base_path}/{study_name}.pkl")
@@ -33,64 +37,66 @@ default_args_dict = {
     "loss_name": default_loss_name,
 }
 
-# search_space = {
-#     "imputation_strategy": ["median"],
-#
-#     # "max_epochs": [4],
-#     "max_epochs": [2, 3],
-#
-#     # "batch_size": [32],
-#     "batch_size": [32, 64],
-#     # "batch_size": [64, 32],
-#     "lr_init": [0.0001],
-#     "weight_decay": [0.0],
-#     "lr_factor": [0.1],
-#     "lr_patience": [10],
-#     "lr_threshold": [0.01],
-#     "early_stop_patience": [20],
-#     "early_stop_threshold": [0.0001],
-#     "model.inner_layers": [json.dumps([512, 512, 256, 128])],
-#     "model.dropout": [0.3],
-#     "model.activation_func": ["elu"],
-#     "remove_nan_samples_perc": [10],
-#     "test_ratio": [0.2],
-# }
+# &&& param search_space
 
 search_space = {
-    "imputation_strategy": ["mean", "median"],
+    "imputation_strategy": ["median"],
 
-    "max_epochs": [999],
+    # "max_epochs": [4],
+    "max_epochs": [2, 3],
 
-    "batch_size": [16, 32, 64],
-
-    "lr_init": [0.001, 0.00001],
-
-    "weight_decay": [0.0, 0.001],
-
-    "lr_factor": [0.1, 0.5],
-
-    "lr_patience": [10, 50],
-
-    "lr_threshold": [0.001, 1.0],
-
-    "early_stop_patience": [30, 100],
-
-    "early_stop_threshold": [0.001, 1.0],
-
-    "model.inner_layers": [
-        json.dumps([512, 512, 256, 128]),
-        json.dumps([512, 512, 256, 256, 128, 64]),
-        json.dumps([1024, 512, 256, 128, 64, 32, 16, 8]),
-    ],
-
-    "model.dropout": [0.1, 0.3],
-
-    "model.activation_func": ["elu", "relu"],
-
-    "remove_nan_samples_perc": [10, 30],
-
+    # "batch_size": [32],
+    "batch_size": [32, 64],
+    # "batch_size": [64, 32],
+    "lr_init": [0.0001],
+    "weight_decay": [0.0],
+    "lr_factor": [0.1],
+    "lr_patience": [10],
+    "lr_threshold": [0.01],
+    "early_stop_patience": [20],
+    "early_stop_threshold": [0.0001],
+    "model.inner_layers": [json.dumps([512, 512, 256, 128])],
+    "model.dropout": [0.3],
+    "model.activation_func": ["elu"],
+    "remove_nan_samples_perc": [10],
     "test_ratio": [0.2],
 }
+
+# search_space = {
+#     "imputation_strategy": ["mean", "median"],
+#
+#     "max_epochs": [999],
+#
+#     "batch_size": [16, 32, 64],
+#
+#     "lr_init": [0.001, 0.00001],
+#
+#     "weight_decay": [0.0, 0.001],
+#
+#     "lr_factor": [0.1, 0.5],
+#
+#     "lr_patience": [10, 50],
+#
+#     "lr_threshold": [0.001, 1.0],
+#
+#     "early_stop_patience": [30, 100],
+#
+#     "early_stop_threshold": [0.001, 1.0],
+#
+#     "model.inner_layers": [
+#         json.dumps([512, 512, 256, 128]),
+#         json.dumps([512, 512, 256, 256, 128, 64]),
+#         json.dumps([1024, 512, 256, 128, 64, 32, 16, 8]),
+#     ],
+#
+#     "model.dropout": [0.1, 0.3],
+#
+#     "model.activation_func": ["elu", "relu"],
+#
+#     "remove_nan_samples_perc": [10, 30],
+#
+#     "test_ratio": [0.2],
+# }
 
 
 def objective(trial):
@@ -158,8 +164,9 @@ def main(overwrite):
         study = joblib.load(study_path)
         sampler = study.sampler
     else:
-        # sampler = GridSampler(search_space, seed=42)
-        sampler = TPESampler(seed=42)
+        # &&& param
+        sampler = GridSampler(search_space, seed=42)
+        # sampler = TPESampler(seed=42)
 
         study = optuna.create_study(study_name=study_name, direction="minimize", sampler=sampler)
 
@@ -180,7 +187,11 @@ def main(overwrite):
             objective,
             n_trials=config_count,
             timeout=None,
-            n_jobs=20,
+
+            # &&& param
+            n_jobs=1,
+            # n_jobs=20,
+
             callbacks=[save_study_callback],
             show_progress_bar=True,
         )
