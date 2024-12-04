@@ -1,6 +1,8 @@
 import json
 from datetime import datetime
 from pathlib import Path
+
+import joblib
 from hyperopt import hp
 import pandas as pd
 import optuna
@@ -19,6 +21,12 @@ pd.set_option('display.min_rows', 10)
 pd.set_option('display.max_rows', 10)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', None)
+
+results_base_path = "result_artifacts"  # &&& this should be somewhere else.
+
+study_name = "optuna-study-1"
+study_path = Path(f"{results_base_path}/{study_name}.pkl")
+result_df_path = Path(f"{results_base_path}/result_df_optuna_1.parquet")
 
 # default_loss_name = "mae"
 default_loss_name = "medae"
@@ -52,32 +60,44 @@ search_space = {
 def objective(trial):
 
     hyperparams = {param: trial.suggest_categorical(param, choices) for param, choices in search_space.items()}
-
     config = merge_dicts(default_args_dict, hyperparams)
 
-    # Initialize the predictor
     set_seeds()  # Reset seeds for reproducibility
     predictor_class_name = config["predictor_class"]
     predictor_class = globals()[predictor_class_name]
     predictor = predictor_class(config)
 
-    # Run training pipeline
-    result = predictor.train_pipeline()
+    result_dict = predictor.train_pipeline()
 
-    loss = result[config["loss_name"]]  # Minimize the loss
+    # Attach custom attributes
+    trial.set_user_attr("config", config)
+    trial.set_user_attr("config_id", get_config_id(config))
+    trial.set_user_attr("mae", result_dict["mae"])
+    trial.set_user_attr("medae", result_dict["medae"])
+    trial.set_user_attr("mse", result_dict["mse"])
+
+    loss = result_dict[config["loss_name"]]  # Minimize the loss
     return loss
 
 
-def main():
+# noinspection PyUnusedLocal
+def save_study_callback(study, trial):
+    joblib.dump(study, study_path)
+    print(f"Saved study '{study.study_name}' to: {study_path}")
+
+
+def main(overwrite):
 
     mem = Memory(noop=False)
     start_dt = datetime.now()
 
-    result_df_path = Path(f"result_artifacts/result_df_optuna_1.parquet")
+    if study_path.exists() and not overwrite:
+        study = joblib.load(study_path)
+    else:
+        sampler = optuna.samplers.GridSampler(search_space, seed=42)
+        study = optuna.create_study(study_name=study_name, direction="minimize", sampler=sampler)
 
-    sampler = optuna.samplers.GridSampler(search_space, seed=42)
-    study = optuna.create_study(study_name="optuna-study-1", direction="minimize", sampler=sampler)
-    study.optimize(objective, n_trials=None, timeout=3600)
+    study.optimize(objective, n_trials=None, timeout=3600, callbacks=[save_study_callback])
 
     # Get the best trial
     best_trial = study.best_trial
@@ -87,8 +107,22 @@ def main():
 
     result_df = study.trials_dataframe()
 
-    result_df = result_df.sort_values(by="value")
-    print(f"result_df:\n{result_df}")
+    # Remove prefix 'user_attrs_' from any columns that have it.
+    cols = {col: col.replace('user_attrs_', '') for col in result_df.columns}
+    result_df = result_df.rename(columns=cols)
+
+    # Bring all the relevant columns in the front.
+    relevant_cols = ["config_id", "datetime_start", "duration", "mse", "mae", "medae", "config"]
+    # cols = relevant_cols + sorted(set(result_df.columns) - set(relevant_cols))
+    result_df = result_df[relevant_cols]
+
+    # Deduplicate based on config_id and latest trail.
+    result_df = result_df.loc[result_df.groupby('config_id')['datetime_start'].idxmax()]
+    result_df = result_df.reset_index(drop=True).set_index("config_id")
+
+    # Sort and print.
+    result_df = result_df.sort_values(by=default_loss_name)
+    print(f"result_df:\n{result_df.drop(columns='config')}")
 
     result_df.to_parquet(result_df_path, engine='pyarrow', index=False)
     print(f"Saved result_df to: {result_df_path}")
@@ -98,4 +132,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(overwrite=False)
