@@ -113,7 +113,7 @@ def objective(trial):
     result_dict = predictor.train_pipeline()
 
     # Attach custom attributes
-    trial.set_user_attr("config", json.dumps(config))
+    trial.set_user_attr("config", config)
     trial.set_user_attr("config_id", config_id)
     trial.set_user_attr("mae", result_dict["mae"])
     trial.set_user_attr("medae", result_dict["medae"])
