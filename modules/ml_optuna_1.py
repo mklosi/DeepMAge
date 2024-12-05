@@ -1,8 +1,9 @@
 import itertools
 import json
+import threading
 from datetime import datetime
 from pathlib import Path
-
+import torch
 import joblib
 import optuna
 import pandas as pd
@@ -27,13 +28,14 @@ search_space = {
 
     "imputation_strategy": ["median"],
 
-    # "max_epochs": [4],
-    # "max_epochs": [2, 3],
-    "max_epochs": [3, 2],
+    # "max_epochs": [4, 5],
+    "max_epochs": [2, 3],
+    # "max_epochs": [3, 2],
 
     # "batch_size": [32],
     # "batch_size": [32, 64],
     "batch_size": [64, 32],
+    # "batch_size": [128, 256],
     "lr_init": [0.0001],
     "weight_decay": [0.0],
     "lr_factor": [0.1],
@@ -90,33 +92,6 @@ search_space = {
 search_space = {key: sorted(search_space[key]) for key in sorted(search_space)}  # This is needed to correctly get ids.
 
 
-def objective(trial):
-
-    config = {param: trial.suggest_categorical(param, choices) for param, choices in search_space.items()}
-    config_id = get_config_id(config)
-
-    set_seeds()  # Reset seeds for reproducibility
-
-    print(f"--- Train pipeline for config_id: {config_id} --------------------------------------------")
-    # print(f"config:\n{json.dumps(config, indent=4)}")
-    predictor_class_name = config["predictor_class"]
-    # noinspection PyTypeChecker
-    predictor_class = globals()[predictor_class_name]
-    predictor = predictor_class(config)
-
-    result_dict = predictor.train_pipeline()
-
-    # Attach custom attributes
-    trial.set_user_attr("config", config)
-    trial.set_user_attr("config_id", config_id)
-    trial.set_user_attr("mae", result_dict["mae"])
-    trial.set_user_attr("medae", result_dict["medae"])
-    trial.set_user_attr("mse", result_dict["mse"])
-
-    loss = result_dict[config["loss_name"]]  # Minimize the loss
-    return loss
-
-
 def main(override, overwrite, restart):
 
     mem = Memory(noop=False)
@@ -127,12 +102,19 @@ def main(override, overwrite, restart):
     results_base_path = "result_artifacts_temp"
 
     result_df_path = Path(f"{results_base_path}/result_df.parquet")
+
+    if result_df_path.exists() and not overwrite:
+        result_df_ = pd.read_parquet(result_df_path)
+    else:
+        result_df_ = pd.DataFrame()
+
     study_name = get_config_id(search_space)[:16]  # Half of actual length.
     study_path = Path(f"{results_base_path}/study_{study_name}.pkl")
 
     if study_path.exists() and not restart:
         study = joblib.load(study_path)
         sampler = study.sampler
+        print(f"Loaded existing study with name: {study_name}")
     else:
         # &&& param
         sampler = GridSampler(search_space, seed=42)
@@ -153,29 +135,60 @@ def main(override, overwrite, restart):
     remaining_trials = config_count - completed_trials
     print(f"Running '{remaining_trials}' new train pipelines...")
 
+    def objective(trial):
+
+        set_seeds()  # Reset seeds for reproducibility
+
+        config = {param: trial.suggest_categorical(param, choices) for param, choices in search_space.items()}
+        config_id = get_config_id(config)
+
+        if config_id in result_df_.index and not override:
+            print(f"--- Found result for config_id: {config_id} --------------------------------------------")
+            result_dict = result_df_.loc[config_id].to_dict()
+        else:
+            print(f"--- Train pipeline for config_id: {config_id} --------------------------------------------")
+            # print(f"config:\n{json.dumps(config, indent=4)}")
+            predictor_class_name = config["predictor_class"]
+            # noinspection PyTypeChecker
+            predictor_class = globals()[predictor_class_name]
+            predictor = predictor_class(config)
+            result_dict = predictor.train_pipeline()
+
+        # Attach custom attributes
+        trial.set_user_attr("config", config)
+        trial.set_user_attr("config_id", config_id)
+        trial.set_user_attr("mae", result_dict["mae"])
+        trial.set_user_attr("medae", result_dict["medae"])
+        trial.set_user_attr("mse", result_dict["mse"])
+
+        loss = result_dict[config["loss_name"]]  # Minimize the loss
+        return loss
+
     # noinspection PyUnusedLocal
     ## trial
     # noinspection PyShadowingNames
     ## study
     def save_study_callback(study, trial):
 
-        result_df = study.trials_dataframe()
+        curr_df = study.trials_dataframe()
 
         # Remove prefix 'user_attrs_' from any columns that have it.
-        cols = {col: col.replace('user_attrs_', '') for col in result_df.columns}
-        result_df = result_df.rename(columns=cols)
+        cols = {col: col.replace('user_attrs_', '') for col in curr_df.columns}
+        curr_df = curr_df.rename(columns=cols)
 
         # Bring all the relevant columns in the front.
         relevant_cols = ["config_id", "datetime_start", "duration", "mse", "mae", "medae", "config"]
         # cols = relevant_cols + sorted(set(result_df.columns) - set(relevant_cols))
-        result_df = result_df[relevant_cols]
+        curr_df = curr_df[relevant_cols]
 
-        # Deduplicate based on config_id and latest trail.
-        result_df = result_df.loc[result_df.groupby('config_id')['datetime_start'].idxmax()]
-        result_df = result_df.reset_index(drop=True).set_index("config_id")
-
-        # Sort and print.
+        nonlocal result_df_
+        result_df = pd.concat([result_df_, curr_df.set_index("config_id")])
+        result_df = result_df.reset_index()
+        result_df = result_df.loc[result_df.groupby("config_id")['datetime_start'].idxmax()]
+        result_df = result_df.set_index("config_id")
         result_df = result_df.sort_values(by=default_loss_name)
+        result_df_ = result_df
+
         print(f"result_df:\n{result_df.drop(columns='config')}")
 
         result_df.to_parquet(result_df_path, engine='pyarrow', index=True)
@@ -190,7 +203,7 @@ def main(override, overwrite, restart):
             n_trials=config_count,
             timeout=None,
 
-            # &&& param
+            # &&& this needs fixing.
             n_jobs=1,
             # n_jobs=20,
 
@@ -211,4 +224,4 @@ if __name__ == "__main__":
     # override - rerun trails even if they are in the result_df.
     # overwrite - set result_df to study.trials_dataframe() on each save callback.
     # restart - restart a study.
-    main(override=False, overwrite=False, restart=True)
+    main(override=False, overwrite=False, restart=False)
