@@ -12,7 +12,7 @@ print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
 print(f"torch.backends.mps.is_available(): {torch.backends.mps.is_available()}")
 
 
-def get_config_id(config): # &&& maybe move to DeepMAgeBase
+def get_config_id(config):
     config_json = json.dumps(config)
     config_id = hashlib.md5(config_json.encode("utf8")).hexdigest()
     return config_id
