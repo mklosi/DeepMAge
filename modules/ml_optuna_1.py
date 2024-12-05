@@ -57,66 +57,66 @@ results_base_path = "result_artifacts_temp"
 #     "loss_name": [default_loss_name],
 # }
 
-# search_space = {
-#     "predictor_class": ["DeepMAgePredictor"],
-#
-#     "imputation_strategy": ["median"],
-#
-#     "normalization_strategy": ["per_study_per_site"],
-#     # "normalization_strategy": ["per_site"],
-#
-#     "split_train_test_by_percent": [False],
-#
-#     # "max_epochs": [4, 5],
-#     "max_epochs": [2, 3],
-#     # "max_epochs": [3, 2],
-#
-#     # "batch_size": [32],
-#     # "batch_size": [32, 64],
-#     "batch_size": [64, 32],
-#     # "batch_size": [128, 256],
-#     "lr_init": [0.0001],
-#     "weight_decay": [0.0],
-#     "lr_factor": [0.1],
-#     "lr_patience": [10],
-#     "lr_threshold": [0.01],
-#     "early_stop_patience": [20],
-#     "early_stop_threshold": [0.0001],
-#     "model.model_class": ["DeepMAgeModel"],
-#     "model.input_dim": [1000],
-#     "model.inner_layers": [json.dumps([512, 512, 256, 128])],
-#     "model.dropout": [0.3],
-#     "model.activation_func": ["elu"],
-#     "remove_nan_samples_perc": [10],
-#     "test_ratio": [0.2],
-#     "loss_name": [default_loss_name],
-# }
-
 search_space = {
-    "batch_size": 16,
-    "early_stop_patience": 100,
-    "early_stop_threshold": 0.001,
-    "imputation_strategy": "mean",
-    "loss_name": "medae",
-    "lr_factor": 0.5,
-    "lr_init": 0.001,
-    "lr_patience": 50,
-    "lr_threshold": 0.001,
-    "max_epochs": 999,
-    "model.activation_func": "elu",
-    "model.dropout": 0.1,
-    "model.inner_layers": "[512, 512, 256, 128]",
-    "model.input_dim": 1000,
-    "model.model_class": "DeepMAgeModel",
-    "predictor_class": "DeepMAgePredictor",
-    "remove_nan_samples_perc": 10,
-    "test_ratio": 0.2,
-    "weight_decay": 0.0
+    "predictor_class": ["DeepMAgePredictor"],
+
+    "imputation_strategy": ["median"],
+
+    "normalization_strategy": ["per_study_per_site"],
+    # "normalization_strategy": ["per_site"],
+
+    "split_train_test_by_percent": [False],
+
+    "max_epochs": [2],
+    # "max_epochs": [2, 3],
+    # "max_epochs": [3, 2],
+
+    "batch_size": [32],
+    # "batch_size": [32, 64],
+    # "batch_size": [64, 32],
+    # "batch_size": [128, 256],
+    "lr_init": [0.0001],
+    "weight_decay": [0.0],
+    "lr_factor": [0.1],
+    "lr_patience": [10],
+    "lr_threshold": [0.01],
+    "early_stop_patience": [20],
+    "early_stop_threshold": [0.0001],
+    "model.model_class": ["DeepMAgeModel"],
+    "model.input_dim": [1000],
+    "model.inner_layers": [json.dumps([512, 512, 256, 128])],
+    "model.dropout": [0.3],
+    "model.activation_func": ["elu"],
+    "remove_nan_samples_perc": [10],
+    "test_ratio": [0.2],
+    "loss_name": [default_loss_name],
 }
 
+# search_space = {
+#     "batch_size": 16,
+#     "early_stop_patience": 100,
+#     "early_stop_threshold": 0.001,
+#     "imputation_strategy": "mean",
+#     "loss_name": "medae",
+#     "lr_factor": 0.5,
+#     "lr_init": 0.001,
+#     "lr_patience": 50,
+#     "lr_threshold": 0.001,
+#     "max_epochs": 999,
+#     "model.activation_func": "elu",
+#     "model.dropout": 0.1,
+#     "model.inner_layers": "[512, 512, 256, 128]",
+#     "model.input_dim": 1000,
+#     "model.model_class": "DeepMAgeModel",
+#     "predictor_class": "DeepMAgePredictor",
+#     "remove_nan_samples_perc": 10,
+#     "test_ratio": 0.2,
+#     "weight_decay": 0.0
+# }
+
 # &&& param
-# search_space = {key: sorted(search_space[key]) for key in sorted(search_space)}  # This is needed to correctly get ids.
-search_space = {key: sorted([search_space[key]]) for key in sorted(search_space)}  # This is needed to correctly get ids.
+search_space = {key: sorted(search_space[key]) for key in sorted(search_space)}  # This is needed to correctly get ids.
+# search_space = {key: sorted([search_space[key]]) for key in sorted(search_space)}  # This is needed to correctly get ids.
 
 
 def main(override, overwrite, restart):
