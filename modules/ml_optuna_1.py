@@ -25,10 +25,47 @@ default_loss_name = "medae"
 
 # &&& param
 
+# results_base_path = "result_artifacts"
+results_base_path = "result_artifacts_temp"
+
+# search_space = {
+#     "predictor_class": ["DeepMAgePredictor"],
+#     "imputation_strategy": ["mean", "median"],
+#     "normalization_strategy": ["per_site", "per_study_per_site"],
+#     "split_train_test_by_percent": [False, True],
+#     "max_epochs": [999],
+#     "batch_size": [16, 32, 64, 128],
+#     "lr_init": [0.001],
+#     "weight_decay": [0.0, 0.001],
+#     "lr_factor": [0.1, 0.5],
+#     "lr_patience": [10],
+#     "lr_threshold": [0.001, 0.1],
+#     "early_stop_patience": [30],
+#     "early_stop_threshold": [0.001, 0.1],
+#     "model.model_class": ["DeepMAgeModel"],
+#     "model.input_dim": [1000],
+#     "model.inner_layers": [
+#         json.dumps([512, 512, 256, 128]),
+#         json.dumps([512, 512, 512, 512, 512]),
+#         json.dumps([512, 512, 256, 256, 128, 64]),
+#         json.dumps([1024, 512, 256, 128, 64, 32, 16, 8]),
+#     ],
+#     "model.dropout": [0.1, 0.3],
+#     "model.activation_func": ["elu", "relu"],
+#     "remove_nan_samples_perc": [10, 30],
+#     "test_ratio": [0.2],
+#     "loss_name": [default_loss_name],
+# }
+
 # search_space = {
 #     "predictor_class": ["DeepMAgePredictor"],
 #
 #     "imputation_strategy": ["median"],
+#
+#     "normalization_strategy": ["per_study_per_site"],
+#     # "normalization_strategy": ["per_site"],
+#
+#     "split_train_test_by_percent": [False],
 #
 #     # "max_epochs": [4, 5],
 #     "max_epochs": [2, 3],
@@ -56,43 +93,36 @@ default_loss_name = "medae"
 # }
 
 search_space = {
-    "predictor_class": ["DeepMAgePredictor"],
-    "imputation_strategy": ["mean", "median"],
-    "max_epochs": [999],
-    "batch_size": [16, 32, 64, 128],
-    "lr_init": [0.001],
-    "weight_decay": [0.0, 0.001],
-    "lr_factor": [0.1, 0.5],
-    "lr_patience": [10],
-    "lr_threshold": [0.001, 0.1],
-    "early_stop_patience": [30],
-    "early_stop_threshold": [0.001, 0.1],
-    "model.model_class": ["DeepMAgeModel"],
-    "model.input_dim": [1000],
-    "model.inner_layers": [
-        json.dumps([512, 512, 256, 128]),
-        json.dumps([512, 512, 512, 512, 512]),
-        json.dumps([512, 512, 256, 256, 128, 64]),
-        json.dumps([1024, 512, 256, 128, 64, 32, 16, 8]),
-    ],
-    "model.dropout": [0.1, 0.3],
-    "model.activation_func": ["elu", "relu"],
-    "remove_nan_samples_perc": [10, 30],
-    "test_ratio": [0.2],
-    "loss_name": [default_loss_name],
+    "batch_size": 16,
+    "early_stop_patience": 100,
+    "early_stop_threshold": 0.001,
+    "imputation_strategy": "mean",
+    "loss_name": "medae",
+    "lr_factor": 0.5,
+    "lr_init": 0.001,
+    "lr_patience": 50,
+    "lr_threshold": 0.001,
+    "max_epochs": 999,
+    "model.activation_func": "elu",
+    "model.dropout": 0.1,
+    "model.inner_layers": "[512, 512, 256, 128]",
+    "model.input_dim": 1000,
+    "model.model_class": "DeepMAgeModel",
+    "predictor_class": "DeepMAgePredictor",
+    "remove_nan_samples_perc": 10,
+    "test_ratio": 0.2,
+    "weight_decay": 0.0
 }
 
-search_space = {key: sorted(search_space[key]) for key in sorted(search_space)}  # This is needed to correctly get ids.
+# &&& param
+# search_space = {key: sorted(search_space[key]) for key in sorted(search_space)}  # This is needed to correctly get ids.
+search_space = {key: sorted([search_space[key]]) for key in sorted(search_space)}  # This is needed to correctly get ids.
 
 
 def main(override, overwrite, restart):
 
     mem = Memory(noop=False)
     start_dt = datetime.now()
-
-    # &&& param
-    results_base_path = "result_artifacts"
-    # results_base_path = "result_artifacts_temp"
 
     result_df_path = Path(f"{results_base_path}/result_df.parquet")
 
@@ -110,9 +140,8 @@ def main(override, overwrite, restart):
         print(f"Loaded existing study with name: {study_name}")
     else:
         # &&& param
-        # sampler = GridSampler(search_space, seed=42)
-        # sampler = TPESampler(seed=42)
-        sampler = TPESampler(seed=42, multivariate=True)
+        sampler = GridSampler(search_space, seed=42)
+        # sampler = TPESampler(seed=42, multivariate=True)
 
         study = optuna.create_study(study_name=study_name, direction="minimize", sampler=sampler)
 

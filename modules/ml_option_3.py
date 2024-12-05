@@ -169,6 +169,8 @@ class DeepMAgePredictor(DeepMAgeBase):
     def __init__(self, config):
         self.config = config
         self.config_id = get_config_id(self.config)
+        self.normalization_strategy = self.config.get("normalization_strategy", "per_study_per_site")
+        self.split_train_test_by_percent = self.config.get("split_train_test_by_percent", False)
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else
             "mps" if torch.backends.mps.is_available()
@@ -314,17 +316,30 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         ## impute #$ docs
         if is_training:
-            methyl_df = pd.DataFrame(self.imputer.fit_transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns)
+            methyl_df = pd.DataFrame(
+                self.imputer.fit_transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns
+            )
         else:
-            methyl_df = pd.DataFrame(self.imputer.transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns)
+            methyl_df = pd.DataFrame(
+                self.imputer.transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns
+            )
 
         ## normalize #$ docs
-        df = self.join_dfs(metadata_df, methyl_df)
-
-        # # filter
-        # df = df[df["gse_id"] == "GSE84624"]
-
-        df = df.groupby('gse_id', group_keys=False).apply(self.normalize_group)
+        if self.normalization_strategy == "per_study_per_site":
+            df = self.join_dfs(metadata_df, methyl_df)
+            df = df.groupby('gse_id', group_keys=False).apply(self.normalize_group)
+            metadata_df, methyl_df = self.split_df(df)
+        elif self.normalization_strategy == "per_site":
+            if is_training:
+                methyl_df = pd.DataFrame(
+                    self.scaler.fit_transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns
+                )
+            else:
+                methyl_df = pd.DataFrame(
+                    self.scaler.transform(methyl_df), index=methyl_df.index, columns=methyl_df.columns
+                )
+        else:
+            raise ValueError(f"Bad normalization_strategy: {self.normalization_strategy}")
 
         # # Check min and max values for each column. Needs work.
         # min_max_df = (
@@ -336,7 +351,6 @@ class DeepMAgePredictor(DeepMAgeBase):
         # min_max_df.columns = ['cpg_site_id', 'min_value', 'max_value']
         # min_max_df = min_max_df.sort_values(by='cpg_site_id').reset_index(drop=True)
 
-        metadata_df, methyl_df = self.split_df(df)
         age_ser = metadata_df[self.age_col_str] if self.age_col_str in metadata_df.columns else None
         return methyl_df, age_ser
 
@@ -501,7 +515,10 @@ class DeepMAgePredictor(DeepMAgeBase):
     def train_pipeline(self):
 
         df = self.load_data()
-        train_df, test_df = self.split_data_by_type(df)
+        if self.split_train_test_by_percent:
+            train_df, test_df = self.split_data_by_percent(df)
+        else:
+            train_df, test_df = self.split_data_by_type(df)
 
         # # Regular train on a single fold, test, and save a model.
         self.train(train_df)
