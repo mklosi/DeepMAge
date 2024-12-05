@@ -28,6 +28,8 @@ default_loss_name = "medae"
 # results_base_path = "result_artifacts"
 results_base_path = "result_artifacts_temp"
 
+# &&& move these into arg module.
+
 # search_space = {
 #     "predictor_class": ["DeepMAgePredictor"],
 #     "imputation_strategy": ["mean", "median"],
@@ -67,11 +69,11 @@ search_space = {
 
     "split_train_test_by_percent": [False],
 
-    "max_epochs": [2],
-    # "max_epochs": [2, 3],
+    # "max_epochs": [3],
+    "max_epochs": [2, 3],  # actually runs as [3, 2]
     # "max_epochs": [3, 2],
 
-    "batch_size": [32],
+    "batch_size": [64],
     # "batch_size": [32, 64],
     # "batch_size": [64, 32],
     # "batch_size": [128, 256],
@@ -108,8 +110,10 @@ search_space = {
 #     "model.inner_layers": "[512, 512, 256, 128]",
 #     "model.input_dim": 1000,
 #     "model.model_class": "DeepMAgeModel",
+#     "normalization_strategy": "per_study_per_site",
 #     "predictor_class": "DeepMAgePredictor",
 #     "remove_nan_samples_perc": 10,
+#     "split_train_test_by_percent": False,
 #     "test_ratio": 0.2,
 #     "weight_decay": 0.0
 # }
@@ -158,6 +162,11 @@ def main(override, overwrite, restart):
     print(f"Running '{remaining_trials}' new train pipelines...")
 
     def objective(trial):
+
+        # # &&&
+        # thread_name = threading.current_thread().name
+        # print(f"AAA Thread Name: {thread_name}")
+        # seed = int(thread_name.rsplit("_", 1)[1])
 
         set_seeds()  # Reset seeds for reproducibility
 
@@ -246,4 +255,4 @@ if __name__ == "__main__":
     # override - rerun trails even if they are in the result_df.
     # overwrite - set result_df to study.trials_dataframe() on each save callback.
     # restart - restart a study.
-    main(override=False, overwrite=False, restart=False)
+    main(override=False, overwrite=True, restart=True)

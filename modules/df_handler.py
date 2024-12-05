@@ -39,11 +39,11 @@ if __name__ == '__main__':
     # ## get sample_id_to_gsm_id
     # sample_id_to_gsm_id = df.set_index("Sample_ID")["GSM_ID"].to_dict()
 
-    # # Find out the best config so far.
-    # df = df.sort_values(by=default_loss_name)
-    # ser = df.iloc[0]
-    # loss = ser[default_loss_name]
-    # config = json.loads(ser["config"])
+    # Find out the best config so far.
+    df = df.sort_values(by=default_loss_name)
+    ser = df.iloc[0]
+    loss = ser[default_loss_name]
+    config = json.loads(ser["config"])
 
     fjdkfjdk = 1
 

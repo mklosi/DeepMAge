@@ -42,7 +42,7 @@ def set_seeds(seed=42):
 
 set_seeds()
 
-
+# &&& remove or store these somewhere.
 # class DeepMAgeModel(nn.Module):
 #     """Deep neural network for age prediction."""
 #
@@ -72,8 +72,6 @@ set_seeds()
 #         x = self.dropout(x)
 #         x = self.fc5(x)
 #         return x
-
-
 # class DeepMAgeModel(nn.Module):
 #     """Deep neural network for age prediction with configurable inner layers."""
 #
@@ -169,8 +167,8 @@ class DeepMAgePredictor(DeepMAgeBase):
     def __init__(self, config):
         self.config = config
         self.config_id = get_config_id(self.config)
-        self.normalization_strategy = self.config.get("normalization_strategy", "per_study_per_site")
-        self.split_train_test_by_percent = self.config.get("split_train_test_by_percent", False)
+        self.normalization_strategy = self.config["normalization_strategy"]
+        self.split_train_test_by_percent = self.config["split_train_test_by_percent"]
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else
             "mps" if torch.backends.mps.is_available()
@@ -193,7 +191,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         self.optimizer = optim.Adam(
             self.model.parameters(),
             lr=self.config["lr_init"],
-            weight_decay=self.config.get("weight_decay", 0.0),  # 0.0 is default.
+            weight_decay=self.config["weight_decay"],  # 0.0 is default.
         )
 
     def load(self):
@@ -462,9 +460,9 @@ class DeepMAgePredictor(DeepMAgeBase):
         with torch.no_grad():
             for batch in test_loader:
                 features = batch["features"].to(self.device)
-                predictions = self.model(features).squeeze()
                 ages = batch["age"].to(self.device)
 
+                predictions = self.model(features).squeeze()
                 predictions_all.extend(predictions.cpu())
                 actual_ages_all.extend(ages.cpu())
 
