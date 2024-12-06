@@ -68,6 +68,8 @@ search_space = {
 
     "imputation_strategy": ["median"],
 
+    # "some_other_hyperparameter_4": [20, 100, 10], # testing hyperparameter.
+
     "normalization_strategy": ["per_study_per_site"],
     # "normalization_strategy": ["per_site"],
 
@@ -79,9 +81,9 @@ search_space = {
 
     # "batch_size": [32],
     # "batch_size": [64],  # <--
-    # "batch_size": [32, 64],  # <--
+    "batch_size": [32, 64],  # <--
     # "batch_size": [64, 32],
-    "batch_size": [32, 64, 128, 256],
+    # "batch_size": [32, 64, 128, 256],
     "lr_init": [0.0001],
     "weight_decay": [0.0],
     "lr_factor": [0.1],
@@ -124,7 +126,8 @@ search_space = {
 # }
 
 # &&& param
-search_space = {key: sorted(search_space[key]) for key in sorted(search_space)}  # This is needed to correctly get ids.
+search_space = {key: search_space[key] for key in sorted(search_space)}  # This is needed to correctly get ids.
+# search_space = {key: sorted(search_space[key]) for key in sorted(search_space)}  # This is needed to correctly get ids.
 # search_space = {key: sorted([search_space[key]]) for key in sorted(search_space)}  # This is needed to correctly get ids.
 
 
@@ -141,6 +144,8 @@ def main(override, overwrite, restart):
         result_df_ = pd.DataFrame()
 
     study_name = get_config_id(search_space)[:16]  # Half of actual length.
+    # &&&
+    study_name = "study-1"
 
     # study_path = Path(f"{results_base_path}/study_{study_name}.pkl")
     #
@@ -155,7 +160,7 @@ def main(override, overwrite, restart):
     #     study = optuna.create_study(study_name=study_name, direction="minimize", sampler=sampler)
 
     # &&& param
-    # sampler = GridSampler(search_space)
+    # sampler = GridSampler(search_space, seed=42)
     sampler = TPESampler()
 
     if restart and study_name in optuna.study.get_all_study_names(storage=study_db_url):
@@ -225,6 +230,7 @@ def main(override, overwrite, restart):
         curr_df = curr_df[relevant_cols]
 
         # &&& do we need to fuck around with index here?  just make sure config_id is at the front.
+        #   in order to do that, we need to mod the current result_df.
         nonlocal result_df_
         result_df = pd.concat([result_df_, curr_df.set_index("config_id")])
         result_df = result_df.reset_index()
@@ -233,10 +239,10 @@ def main(override, overwrite, restart):
         result_df = result_df.sort_values(by=default_loss_name)
         result_df_ = result_df
 
-        print(f"result_df:\n{result_df.drop(columns='config')}")
-
         result_df.to_parquet(result_df_path, engine='pyarrow', index=True)
         print(f"Saved result_df to: {result_df_path}")
+
+        print(f"result_df:\n{result_df.drop(columns='config')}")
 
         # &&& no need for this anymore.
         # joblib.dump(study, study_path)
@@ -245,7 +251,7 @@ def main(override, overwrite, restart):
     if isinstance(sampler, TPESampler) or not sampler.is_exhausted(study):
         study.optimize(
             objective,
-            n_trials=8,  # &&& param
+            n_trials=800,  # &&& param
             timeout=None,
             n_jobs=1,
             callbacks=[save_study_callback],
