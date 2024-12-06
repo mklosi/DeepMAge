@@ -7,6 +7,7 @@ import torch
 import joblib
 import optuna
 import pandas as pd
+from optuna import load_study
 from optuna.samplers import GridSampler, TPESampler
 
 from modules.memory import Memory
@@ -24,11 +25,14 @@ pd.set_option('display.width', None)
 default_loss_name = "medae"
 
 # &&& param
-
 # results_base_path = "result_artifacts"
 results_base_path = "result_artifacts_temp"
 
+study_db_url = f"sqlite:///{results_base_path}/studies.db"
+
 # &&& move these into arg module.
+
+# &&& param
 
 # search_space = {
 #     "predictor_class": ["DeepMAgePredictor"],
@@ -70,13 +74,14 @@ search_space = {
     "split_train_test_by_percent": [False],
 
     # "max_epochs": [3],
-    "max_epochs": [2, 3],  # actually runs as [3, 2]
+    "max_epochs": [2, 3],  # actually runs as [3, 2]  <--
     # "max_epochs": [3, 2],
 
-    "batch_size": [64],
-    # "batch_size": [32, 64],
+    # "batch_size": [32],
+    # "batch_size": [64],  # <--
+    # "batch_size": [32, 64],  # <--
     # "batch_size": [64, 32],
-    # "batch_size": [128, 256],
+    "batch_size": [32, 64, 128, 256],
     "lr_init": [0.0001],
     "weight_decay": [0.0],
     "lr_factor": [0.1],
@@ -136,37 +141,44 @@ def main(override, overwrite, restart):
         result_df_ = pd.DataFrame()
 
     study_name = get_config_id(search_space)[:16]  # Half of actual length.
-    study_path = Path(f"{results_base_path}/study_{study_name}.pkl")
 
-    if study_path.exists() and not restart:
-        study = joblib.load(study_path)
-        sampler = study.sampler
-        print(f"Loaded existing study with name: {study_name}")
-    else:
-        # &&& param
-        sampler = GridSampler(search_space, seed=42)
-        # sampler = TPESampler(seed=42, multivariate=True)
+    # study_path = Path(f"{results_base_path}/study_{study_name}.pkl")
+    #
+    # if study_path.exists() and not restart:
+    #     study = joblib.load(study_path)
+    #     sampler = study.sampler
+    #     print(f"Loaded existing study with name: {study_name}")
+    # else:
+    #     sampler = GridSampler(search_space, seed=42)
+    #     # sampler = TPESampler(seed=42, multivariate=True)
+    #
+    #     study = optuna.create_study(study_name=study_name, direction="minimize", sampler=sampler)
 
-        study = optuna.create_study(study_name=study_name, direction="minimize", sampler=sampler)
+    # &&& param
+    # sampler = GridSampler(search_space)
+    sampler = TPESampler()
 
-    config_count = len(list(itertools.product(*search_space.values())))
-    print(f"Found '{config_count}' total configs.")
+    if restart and study_name in optuna.study.get_all_study_names(storage=study_db_url):
+        optuna.delete_study(study_name=study_name, storage=study_db_url)
+
+    study = optuna.create_study(
+        study_name=study_name,
+        direction="minimize",
+        sampler=sampler,
+        storage=study_db_url,
+        load_if_exists=True,
+    )
 
     if isinstance(sampler, GridSampler):
+        print(f"Using GridSampler.")
         # noinspection PyProtectedMember
-        all_grids_count = len(sampler._all_grids)
-        assert all_grids_count == config_count
-
-    completed_trials = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
-    remaining_trials = config_count - completed_trials
-    print(f"Running '{remaining_trials}' new train pipelines...")
+        config_count = len(sampler._all_grids)
+        print(f"Found '{config_count}' total configs.")
+        completed_trials = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
+        remaining_trials = config_count - completed_trials
+        print(f"Running '{remaining_trials}' new train pipelines...")
 
     def objective(trial):
-
-        # # &&&
-        # thread_name = threading.current_thread().name
-        # print(f"AAA Thread Name: {thread_name}")
-        # seed = int(thread_name.rsplit("_", 1)[1])
 
         set_seeds()  # Reset seeds for reproducibility
 
@@ -212,6 +224,7 @@ def main(override, overwrite, restart):
         # cols = relevant_cols + sorted(set(result_df.columns) - set(relevant_cols))
         curr_df = curr_df[relevant_cols]
 
+        # &&& do we need to fuck around with index here?  just make sure config_id is at the front.
         nonlocal result_df_
         result_df = pd.concat([result_df_, curr_df.set_index("config_id")])
         result_df = result_df.reset_index()
@@ -225,19 +238,16 @@ def main(override, overwrite, restart):
         result_df.to_parquet(result_df_path, engine='pyarrow', index=True)
         print(f"Saved result_df to: {result_df_path}")
 
-        joblib.dump(study, study_path)
-        print(f"Saved study '{study.study_name}' to: {study_path}")
+        # &&& no need for this anymore.
+        # joblib.dump(study, study_path)
+        # print(f"Saved study '{study.study_name}' to: {study_path}")
 
     if isinstance(sampler, TPESampler) or not sampler.is_exhausted(study):
         study.optimize(
             objective,
-            n_trials=config_count,
+            n_trials=8,  # &&& param
             timeout=None,
-
-            # &&& this needs fixing.
             n_jobs=1,
-            # n_jobs=20,
-
             callbacks=[save_study_callback],
             # show_progress_bar=True,
         )
@@ -255,4 +265,4 @@ if __name__ == "__main__":
     # override - rerun trails even if they are in the result_df.
     # overwrite - set result_df to study.trials_dataframe() on each save callback.
     # restart - restart a study.
-    main(override=False, overwrite=True, restart=True)
+    main(override=False, overwrite=False, restart=False)
