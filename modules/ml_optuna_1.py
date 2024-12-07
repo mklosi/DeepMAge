@@ -7,10 +7,11 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Mapping
-
+import time
 import portalocker
 import torch
 import joblib
+import pytz
 import optuna
 import pandas as pd
 from numpy.random.mtrand import Sequence
@@ -32,12 +33,22 @@ pd.set_option('display.max_rows', 10)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', None)
 
+# tz_str = "US/Eastern"
+tz_str = "US/Pacific"
+tz_ = pytz.timezone(tz_str)
+os.environ['TZ'] = tz_str
+time.tzset()
+
 # default_loss_name = "mae"
 default_loss_name = "medae"
 
 # &&& param
 results_base_path = "result_artifacts"
 # results_base_path = "result_artifacts_temp"
+
+# &&& param
+# study_name = get_config_id(search_space)[:16]  # Half of actual length.
+study_name = "study-3"
 
 study_db_url = f"sqlite:///{results_base_path}/studies.db"
 lock_path = Path(f"{results_base_path}/result_df.lock")
@@ -53,29 +64,29 @@ def get_config(trial):
     search_space = {
         "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
 
-        "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean", "median"]),
+        "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean"]),
 
-        "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site", "per_study_per_site"]),
+        "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site"]),
 
         "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [False, True]),
 
         "max_epochs": trial.suggest_int("max_epochs", 999, 999),
 
-        "batch_size": trial.suggest_categorical("batch_size", [16, 32, 64, 128, 256, 512, 1024]),
+        "batch_size": trial.suggest_categorical("batch_size", [8, 16, 32, 128]),
 
-        "lr_init": trial.suggest_float("lr_init", 0.0001, 0.1),
+        "lr_init": trial.suggest_float("lr_init", 0.08, 1.0),
 
-        "weight_decay": trial.suggest_float("weight_decay", 0.0, 0.5),
+        "weight_decay": trial.suggest_float("weight_decay", 0.2, 0.5),
 
-        "lr_factor": trial.suggest_float("lr_factor", 0.1, 0.5),
+        "lr_factor": trial.suggest_float("lr_factor", 0.3, 0.43),
 
-        "lr_patience": trial.suggest_int("lr_patience", 10, 10),
+        "lr_patience": trial.suggest_int("lr_patience", 10, 20),
 
-        "lr_threshold": trial.suggest_float("lr_threshold", 0.001, 1.0),
+        "lr_threshold": trial.suggest_float("lr_threshold", 0.1, 0.5),
 
-        "early_stop_patience": trial.suggest_int("early_stop_patience", 50, 50),
+        "early_stop_patience": trial.suggest_int("early_stop_patience", 30, 60),
 
-        "early_stop_threshold": trial.suggest_float("early_stop_threshold", 0.001, 1.0),
+        "early_stop_threshold": trial.suggest_float("early_stop_threshold", 0.15, 0.45),
 
         "model.model_class": trial.suggest_categorical("model.model_class", ["DeepMAgeModel"]),
 
@@ -83,18 +94,18 @@ def get_config(trial):
 
         "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
             json.dumps([512, 512, 256, 128]),
-            json.dumps([512, 512, 512, 512, 512]),
-            json.dumps([512, 512, 256, 256, 128, 64]),
-            json.dumps([1024, 512, 256, 128, 64, 32, 16, 8]),
+            json.dumps([1024, 512, 256, 128]),
+            json.dumps([256, 128, 64]),
+            json.dumps([512, 512, 128, 128, 64, 64]),
         ]),
 
-        "model.dropout": trial.suggest_float("model.dropout", 0.1, 0.5),
+        "model.dropout": trial.suggest_float("model.dropout", 0.01, 0.2),
 
-        "model.activation_func": trial.suggest_categorical("model.activation_func", ["elu", "relu"]),
+        "model.activation_func": trial.suggest_categorical("model.activation_func", ["elu"]),
 
-        "remove_nan_samples_perc": trial.suggest_int("remove_nan_samples_perc", 10, 30, step=10),
+        "remove_nan_samples_perc": trial.suggest_int("remove_nan_samples_perc", 5, 20),
 
-        "test_ratio": trial.suggest_float("test_ratio", 0.2, 0.2),
+        "test_ratio": trial.suggest_float("test_ratio", 0.05, 0.2),
 
         "loss_name": trial.suggest_categorical("loss_name", [default_loss_name]),
     }
@@ -102,40 +113,35 @@ def get_config(trial):
     # search_space = {
     #     "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
     #
+    #     # "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean"]),
     #     "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["median"]),
     #
-    #     # "some_other_hyperparameter_4": [40], # testing hyperparameter.
-    #     # "some_other_hyperparameter_5": [50], # testing hyperparameter.
-    #
-    #     "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_study_per_site"]),
     #     # "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site"]),
-    #     # "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_study_per_site", "per_site"]),
+    #     "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_study_per_site"]),
+    #     # "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site", "per_study_per_site"]),
     #
-    #     "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [False]),
+    #     "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [True]),
     #
-    #     # "max_epochs": trial.suggest_int("max_epochs", [20]),
-    #     "max_epochs": trial.suggest_int("max_epochs", 2, 3),  # <--
-    #     # "max_epochs": trial.suggest_int("max_epochs", [3, 2]),
+    #     # "max_epochs": trial.suggest_int("max_epochs", 999, 999),
+    #     "max_epochs": trial.suggest_int("max_epochs", 2, 3),
     #
-    #     # "batch_size": trial.suggest_int("batch_size", [32]),
-    #     "batch_size": trial.suggest_int("batch_size", 32, 64, step=32),  # <--
-    #     # "batch_size": trial.suggest_int("batch_size", [32, 64]),  # <--
-    #     # "batch_size": trial.suggest_int("batch_size", [64, 32]),
-    #     # "batch_size": trial.suggest_int("batch_size", [32, 64, 128, 256]),
+    #     # "batch_size": trial.suggest_int("batch_size", 32, 32),
+    #     # "batch_size": trial.suggest_int("batch_size", 64, 64),
+    #     "batch_size": trial.suggest_int("batch_size", 32, 64, step=32),
     #
-    #     "lr_init": trial.suggest_float("lr_init", 0.0001, 0.0001),
+    #     "lr_init": trial.suggest_float("lr_init", 0.001, 0.01),
     #
-    #     "weight_decay": trial.suggest_float("weight_decay", 0.0, 0.0),
+    #     "weight_decay": trial.suggest_float("weight_decay", 0.001, 0.001),
     #
-    #     "lr_factor": trial.suggest_float("lr_factor", 0.1, 0.1),
+    #     "lr_factor": trial.suggest_float("lr_factor", 0.5, 0.5),
     #
     #     "lr_patience": trial.suggest_int("lr_patience", 10, 10),
     #
-    #     "lr_threshold": trial.suggest_float("lr_threshold", 0.01, 0.01),
+    #     "lr_threshold": trial.suggest_float("lr_threshold", 0.001, 0.001),
     #
-    #     "early_stop_patience": trial.suggest_int("early_stop_patience", 20, 20),
+    #     "early_stop_patience": trial.suggest_int("early_stop_patience", 30, 30),
     #
-    #     "early_stop_threshold": trial.suggest_float("early_stop_threshold", 0.0001, 0.0001),
+    #     "early_stop_threshold": trial.suggest_float("early_stop_threshold", 0.001, 0.001),
     #
     #     "model.model_class": trial.suggest_categorical("model.model_class", ["DeepMAgeModel"]),
     #
@@ -152,39 +158,15 @@ def get_config(trial):
     #         # more options here.
     #     ]),
     #
-    #     "model.dropout": trial.suggest_float("model.dropout", 0.3, 0.3),
+    #     "model.dropout": trial.suggest_float("model.dropout", 0.1, 0.1),
     #
     #     "model.activation_func": trial.suggest_categorical("model.activation_func", ["elu"]),
     #
-    #     "remove_nan_samples_perc": trial.suggest_int("remove_nan_samples_perc", 10, 10),
+    #     "remove_nan_samples_perc": trial.suggest_int("remove_nan_samples_perc", 30, 30),
     #
     #     "test_ratio": trial.suggest_float("test_ratio", 0.2, 0.2),
     #
     #     "loss_name": trial.suggest_categorical("loss_name", [default_loss_name]),
-    # }
-
-    # search_space = {
-    #     "batch_size": 16,
-    #     "early_stop_patience": 100,
-    #     "early_stop_threshold": 0.001,
-    #     "imputation_strategy": "mean",
-    #     "loss_name": "medae",
-    #     "lr_factor": 0.5,
-    #     "lr_init": 0.001,
-    #     "lr_patience": 50,
-    #     "lr_threshold": 0.001,
-    #     "max_epochs": 999,
-    #     "model.activation_func": "elu",
-    #     "model.dropout": 0.1,
-    #     "model.inner_layers": "[512, 512, 256, 128]",
-    #     "model.input_dim": 1000,
-    #     "model.model_class": "DeepMAgeModel",
-    #     "normalization_strategy": "per_study_per_site",
-    #     "predictor_class": "DeepMAgePredictor",
-    #     "remove_nan_samples_perc": 10,
-    #     "split_train_test_by_percent": False,
-    #     "test_ratio": 0.2,
-    #     "weight_decay": 0.0
     # }
 
     return search_space
@@ -237,22 +219,6 @@ def main(override, restart):
     mem = Memory(noop=False)
     start_dt = datetime.now()
 
-    # &&& param
-    # study_name = get_config_id(search_space)[:16]  # Half of actual length.
-    study_name = "study-2"
-
-    # study_path = Path(f"{results_base_path}/study_{study_name}.pkl")
-    #
-    # if study_path.exists() and not restart:
-    #     study = joblib.load(study_path)
-    #     sampler = study.sampler
-    #     print(f"Loaded existing study with name: {study_name}")
-    # else:
-    #     sampler = GridSampler(search_space, seed=42)
-    #     # sampler = TPESampler(seed=42, multivariate=True)
-    #
-    #     study = optuna.create_study(study_name=study_name, direction="minimize", sampler=sampler)
-
     # search_space: Mapping[str, Sequence[GridValueType]] = {}
     # sampler = GridSampler(search_space, seed=42) # &&& is there a way to fix this?
 
@@ -279,9 +245,7 @@ def main(override, restart):
     def objective(trial):
 
         set_seeds()  # Reset seeds for reproducibility
-
         config = get_config(trial)
-        config = {key: config[key] for key in sorted(config)}
         config_id = get_config_id(config)
 
         print(f"--- Train pipeline for config_id: {config_id} --------------------------------------------")
@@ -354,14 +318,15 @@ def main(override, restart):
         # print(f"Saved study '{study.study_name}' to: {study_path}")
 
         print_study_counts(study, sampler)
+        print(f"Now dt: {datetime.now(tz_)}")
 
     # noinspection PyUnresolvedReferences
     if isinstance(sampler, TPESampler) or not sampler.is_exhausted(study):
         study.optimize(
             objective,
             # &&& param
-            # n_trials=20,
-            n_trials=1000,
+            # n_trials=10,
+            n_trials=9999,
             timeout=None,
             n_jobs=1,
             callbacks=[save_study_callback],

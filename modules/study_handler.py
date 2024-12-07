@@ -6,12 +6,21 @@ import pandas as pd
 import optuna
 from io import StringIO
 
+from optuna.importance import get_param_importances
 from optuna.trial import TrialState
+
+from optuna.visualization import plot_param_importances, plot_slice
 
 from memory import Memory
 from modules.ml_common import get_config_id
-from modules.ml_optuna_1 import study_db_url, print_study_counts
+from modules.ml_optuna_1 import print_study_counts
 from modules.ml_pipeline import default_loss_name
+
+# &&& param
+results_base_path = "result_artifacts"
+# results_base_path = "result_artifacts_temp"
+
+study_db_url = f"sqlite:///{results_base_path}/studies.db"
 
 if __name__ == '__main__':
 
@@ -47,6 +56,27 @@ if __name__ == '__main__':
         #     for trial in failed_trials:
         #         study.enqueue_trial(trial.params)
         #     print_study_counts(study)
+
+        # print("param_importances:")
+        # param_importances = get_param_importances(study)
+        # for param, importance in param_importances.items():
+        #     print(f"{param}: {importance:,.6f}")
+
+        print("param_importances visualization...")
+        fig = plot_param_importances(study)
+        fig.show()
+
+        # print("plot_parallel_coordinate visualization...")
+        # fig = visualization.plot_parallel_coordinate(study)
+        # fig.show()
+
+        # print("plot_contour visualization...")
+        # fig = visualization.plot_contour(study)
+        # fig.show()
+
+        print("plot_slice visualization...")
+        fig = plot_slice(study)
+        fig.show()
 
         curr_df = study.trials_dataframe()
 

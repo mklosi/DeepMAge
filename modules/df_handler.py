@@ -31,7 +31,8 @@ if __name__ == '__main__':
     # path = "resources_methylprep/GSE102177_download_pandas_1.3.5/GPL13534/beta_values.pkl"
     # path = "resources_methylprep/GSE102177_download_pandas_1.3.5/GPL13534/GSE102177_GPL13534_meta_data.pkl"
     # path = Path(f"result_artifacts/result_df_study-1.parquet")
-    path = Path(f"result_artifacts_temp/result_df.parquet")
+    path = Path(f"result_artifacts/result_df.parquet")
+    # path = Path(f"result_artifacts_temp/result_df.parquet")
 
     df = pd.read_parquet(path)
     # df = pd.read_pickle(path)
@@ -43,7 +44,8 @@ if __name__ == '__main__':
     df = df.sort_values(by=default_loss_name)
     ser = df.iloc[0]
     loss = ser[default_loss_name]
-    config = json.loads(ser["config"])
+    config_json = ser["config"]
+    config = json.loads(config_json)
 
     fjdkfjdk = 1
 
