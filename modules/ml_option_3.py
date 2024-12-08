@@ -129,8 +129,12 @@ class DeepMAgeModel(nn.Module):
 
         self.dropout = nn.Dropout(self.config["model.dropout"])
         activation_funcs = {
+            "celu": nn.CELU(),
             "elu": nn.ELU(),
+            "gelu": nn.GELU(),
+            "leakyrelu": nn.LeakyReLU(),
             "relu": nn.ReLU(),
+            "silu": nn.SiLU(),
         }
         self.activation_func = activation_funcs[self.config["model.activation_func"]]
 
@@ -288,9 +292,12 @@ class DeepMAgePredictor(DeepMAgeBase):
     def prepare_features(self, df, is_training=True):
 
         ## Remove samples with more than X perc nan values across all cpg sites.
+        #   This is a threshold. If this number is 0, it means
+        #   filer out any samples that have any missing data. If this number is 100,
+        #   it means only filter out samples that have all their site data missing.
         nan_counts = df.isna().sum(axis=1)  # Count NaNs per GSM ID
-        ten_perc = self.config["model.input_dim"] // self.config["remove_nan_samples_perc"]
-        gsm_ids_with_nans = nan_counts[nan_counts > ten_perc].index
+        max_nan_allowed = self.config["model.input_dim"] * (self.config["remove_nan_samples_perc_2"] / 100.0)
+        gsm_ids_with_nans = nan_counts[nan_counts > max_nan_allowed].index
         df = df[~df.index.isin(gsm_ids_with_nans)]
 
         metadata_df, methyl_df = self.split_df(df)

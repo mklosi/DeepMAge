@@ -48,11 +48,15 @@ results_base_path = "result_artifacts"
 
 # &&& param
 # study_name = get_config_id(search_space)[:16]  # Half of actual length.
-study_name = "study-3"
+study_name = "study-4"
 
 study_db_url = f"sqlite:///{results_base_path}/studies.db"
 lock_path = Path(f"{results_base_path}/result_df.lock")
 result_df_path = Path(f"{results_base_path}/result_df.parquet")
+
+config_id_str = "config_id"
+
+relevant_cols = ["config_id", "datetime_start", "duration", "medae", "mae", "mse", "study_name", "config"]
 
 
 def get_config(trial):
@@ -61,56 +65,60 @@ def get_config(trial):
 
     # &&& param
 
-    search_space = {
-        "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
+    search_space = {  # big run
+
+        "batch_size": trial.suggest_int("batch_size", 8, 1024, step=8),
+
+        "early_stop_patience": trial.suggest_int("early_stop_patience", 100, 100),
+
+        "early_stop_threshold": round(trial.suggest_float("early_stop_threshold", 0.3, 0.6, step=0.01), 2),
 
         "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean"]),
 
-        "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site"]),
+        "loss_name": trial.suggest_categorical("loss_name", [default_loss_name]),
 
-        "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [False, True]),
+        "lr_factor": round(trial.suggest_float("lr_factor", 0.2, 0.5, step=0.01), 2),
+
+        "lr_init": round(trial.suggest_float("lr_init", 0.00001, 0.001, step=0.00001), 5),
+
+        "lr_patience": trial.suggest_int("lr_patience", 50, 50),
+
+        "lr_threshold": round(trial.suggest_float("lr_threshold", 0.25, 0.45, step=0.01), 2),
 
         "max_epochs": trial.suggest_int("max_epochs", 999, 999),
 
-        "batch_size": trial.suggest_categorical("batch_size", [8, 16, 32, 128]),
+        "model.activation_func": trial.suggest_categorical("model.activation_func", [
+            "celu", "elu", "gelu", "leakyrelu", "relu", "silu",
+        ]),
 
-        "lr_init": trial.suggest_float("lr_init", 0.08, 1.0),
-
-        "weight_decay": trial.suggest_float("weight_decay", 0.2, 0.5),
-
-        "lr_factor": trial.suggest_float("lr_factor", 0.3, 0.43),
-
-        "lr_patience": trial.suggest_int("lr_patience", 10, 20),
-
-        "lr_threshold": trial.suggest_float("lr_threshold", 0.1, 0.5),
-
-        "early_stop_patience": trial.suggest_int("early_stop_patience", 30, 60),
-
-        "early_stop_threshold": trial.suggest_float("early_stop_threshold", 0.15, 0.45),
-
-        "model.model_class": trial.suggest_categorical("model.model_class", ["DeepMAgeModel"]),
-
-        "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
+        "model.dropout": round(trial.suggest_float("model.dropout", 0.0, 0.2, step=0.01), 2),
 
         "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
             json.dumps([512, 512, 256, 128]),
-            json.dumps([1024, 512, 256, 128]),
             json.dumps([256, 128, 64]),
-            json.dumps([512, 512, 128, 128, 64, 64]),
+            json.dumps([128, 64]),
+            json.dumps([32]),
         ]),
 
-        "model.dropout": trial.suggest_float("model.dropout", 0.01, 0.2),
+        "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
 
-        "model.activation_func": trial.suggest_categorical("model.activation_func", ["elu"]),
+        "model.model_class": trial.suggest_categorical("model.model_class", ["DeepMAgeModel"]),
 
-        "remove_nan_samples_perc": trial.suggest_int("remove_nan_samples_perc", 5, 20),
+        "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site"]),
 
-        "test_ratio": trial.suggest_float("test_ratio", 0.05, 0.2),
+        "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
 
-        "loss_name": trial.suggest_categorical("loss_name", [default_loss_name]),
+        "remove_nan_samples_perc_2": trial.suggest_int("remove_nan_samples_perc_2", 0, 100, step=10),
+
+        "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [False]),
+
+        "test_ratio": trial.suggest_float("test_ratio", 0.2, 0.2),
+
+        "weight_decay": round(trial.suggest_float("weight_decay", 0.0, 0.5, step=0.01), 2),
+
     }
 
-    # search_space = {
+    # search_space = {  # benchmark run
     #     "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
     #
     #     # "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean"]),
@@ -129,7 +137,7 @@ def get_config(trial):
     #     # "batch_size": trial.suggest_int("batch_size", 64, 64),
     #     "batch_size": trial.suggest_int("batch_size", 32, 64, step=32),
     #
-    #     "lr_init": trial.suggest_float("lr_init", 0.001, 0.01),
+    #     "lr_init": trial.suggest_float("lr_init", 0.001, 0.001),
     #
     #     "weight_decay": trial.suggest_float("weight_decay", 0.001, 0.001),
     #
@@ -162,7 +170,66 @@ def get_config(trial):
     #
     #     "model.activation_func": trial.suggest_categorical("model.activation_func", ["elu"]),
     #
-    #     "remove_nan_samples_perc": trial.suggest_int("remove_nan_samples_perc", 30, 30),
+    #     "remove_nan_samples_perc_2": trial.suggest_int("remove_nan_samples_perc_2", 30, 30),
+    #
+    #     "test_ratio": trial.suggest_float("test_ratio", 0.2, 0.2),
+    #
+    #     "loss_name": trial.suggest_categorical("loss_name", [default_loss_name]),
+    # }
+
+    # search_space = {  # dev run
+    #     "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
+    #
+    #     # "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean"]),
+    #     "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["median"]),
+    #
+    #     # "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site"]),
+    #     "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_study_per_site"]),
+    #     # "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site", "per_study_per_site"]),
+    #
+    #     "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [True]),
+    #
+    #     # "max_epochs": trial.suggest_int("max_epochs", 999, 999),
+    #     "max_epochs": trial.suggest_int("max_epochs", 2, 2),
+    #
+    #     "batch_size": trial.suggest_int("batch_size", 32, 32),
+    #     # "batch_size": trial.suggest_int("batch_size", 64, 64),
+    #     # "batch_size": trial.suggest_int("batch_size", 32, 64, step=32),
+    #
+    #     "lr_init": round(trial.suggest_float("lr_init", 0.001, 0.001, step=0.001), 3),
+    #
+    #     "weight_decay": trial.suggest_float("weight_decay", 0.001, 0.001),
+    #
+    #     "lr_factor": trial.suggest_float("lr_factor", 0.5, 0.5),
+    #
+    #     "lr_patience": trial.suggest_int("lr_patience", 10, 10),
+    #
+    #     "lr_threshold": trial.suggest_float("lr_threshold", 0.001, 0.001),
+    #
+    #     "early_stop_patience": trial.suggest_int("early_stop_patience", 30, 30),
+    #
+    #     "early_stop_threshold": trial.suggest_float("early_stop_threshold", 0.001, 0.001),
+    #
+    #     "model.model_class": trial.suggest_categorical("model.model_class", ["DeepMAgeModel"]),
+    #
+    #     "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
+    #
+    #     # &&& get more creative here. also fix number of actual hidden layers are -1.
+    #     "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
+    #         json.dumps([
+    #             trial.suggest_int("hl1", 512, 512),
+    #             trial.suggest_int("hl2", 512, 512),
+    #             trial.suggest_int("hl3", 256, 256),
+    #             trial.suggest_int("hl4", 128, 128),
+    #         ]),
+    #         # more options here.
+    #     ]),
+    #
+    #     "model.dropout": trial.suggest_float("model.dropout", 0.1, 0.1),
+    #
+    #     "model.activation_func": trial.suggest_categorical("model.activation_func", ["elu"]),
+    #
+    #     "remove_nan_samples_perc_2": trial.suggest_int("remove_nan_samples_perc_2", 30, 30),
     #
     #     "test_ratio": trial.suggest_float("test_ratio", 0.2, 0.2),
     #
@@ -198,7 +265,6 @@ def print_study_counts(study, sampler=None):
         f"waiting_trials: {waiting_trials}"
     )
 
-    # &&&
     sum_ = complete_trials + fail_trials + pruned_trials + running_trials + waiting_trials
     # assert sum_ == total_trials
     if sum_ != total_trials:
@@ -258,8 +324,13 @@ def main(override, restart):
         if not override and not result_df.empty and config_id in set(result_df["config_id"].to_list()):
             print(f"Found existing results.")
             results = result_df[result_df["config_id"] == config_id].to_dict(orient="records")
-            assert len(results) == 1
-            result_dict = results[0]
+            if len(results) > 1:
+                print(f"WARNING: Duplicate rows with different '{default_loss_name}' values found for config_id: {config_id}")
+                for result in results:
+                    print(f"\t{default_loss_name}: {result[default_loss_name]}")
+                result_dict = min(results, key=lambda x: x[default_loss_name])
+            else:
+                result_dict = results[0]
         else:
             print(f"Running a new training pipeline.")
             # print(f"config:\n{json.dumps(config, indent=4)}")
@@ -272,6 +343,7 @@ def main(override, restart):
         # Attach custom attributes
         trial.set_user_attr("config", json.dumps(config))
         trial.set_user_attr("config_id", config_id)
+        trial.set_user_attr("study_name", trial.study.study_name)
         trial.set_user_attr("mae", result_dict["mae"])
         trial.set_user_attr("medae", result_dict["medae"])
         trial.set_user_attr("mse", result_dict["mse"])
@@ -292,11 +364,9 @@ def main(override, restart):
         cols_dict = {col: col.replace('user_attrs_', '') for col in curr_df.columns}
         curr_df = curr_df.rename(columns=cols_dict)
 
-        # Bring all the relevant columns in the front.
-        relevant_cols = ["config_id", "datetime_start", "duration", "mse", "mae", "medae", "config"]
-        # cols = relevant_cols
-        cols = relevant_cols + sorted(set(curr_df.columns) - set(relevant_cols))
-        curr_df = curr_df[cols]
+        # # &&& mod values, if needed.
+        # index_to_update = curr_df[curr_df[config_id_str] == "b7c65ed3969908def6261778cc2a4c2a"].index[0]
+        # curr_df.loc[index_to_update, default_loss_name] = 16.955668
 
         with portalocker.Lock(lock_path, mode="a", timeout=10):
             func_name = inspect.currentframe().f_code.co_name
@@ -304,7 +374,18 @@ def main(override, restart):
             result_df = get_result_df()
 
             result_df = pd.concat([result_df, curr_df], ignore_index=True)
-            result_df = result_df.loc[result_df.groupby("config_id")['datetime_start'].idxmax()]
+
+            # Bring all the relevant columns in the front.
+            # cols = relevant_cols
+            cols = relevant_cols + sorted(set(result_df.columns) - set(relevant_cols))
+            result_df = result_df[cols]
+
+            # Deduplicate based on config_id and similar 'default_loss_name' values, but without modifying the original precision.
+            default_loss_name_rounded = f'{default_loss_name}_rounded'
+            result_df[default_loss_name_rounded] = result_df[default_loss_name].round(6)
+            result_df = result_df.drop_duplicates(subset=[config_id_str, default_loss_name_rounded], keep="last", ignore_index=True)
+            result_df = result_df.drop(columns=[default_loss_name_rounded])
+
             result_df = result_df.sort_values(by=default_loss_name)
 
             result_df.to_parquet(result_df_path, engine='pyarrow', index=False)

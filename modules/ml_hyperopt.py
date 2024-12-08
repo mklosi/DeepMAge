@@ -62,7 +62,7 @@ search_space = {
         "activation_func": hp.choice("activation_func", ["elu"]),
     },
 
-    "remove_nan_samples_perc": hp.choice("remove_nan_samples_perc", [10]),
+    "remove_nan_samples_perc_2": hp.choice("remove_nan_samples_perc_2", [10]),
 
     "test_ratio": hp.choice("test_ratio", [0.2]),
 }

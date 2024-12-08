@@ -61,7 +61,7 @@ main_args_list = [
             "dropout": model__dropout,
             "activation_func": model__activation_func,
         },
-        "remove_nan_samples_perc": remove_nan_samples_perc,
+        "remove_nan_samples_perc_2": remove_nan_samples_perc_2,
         "test_ratio": test_ratio,
     }
 
@@ -104,7 +104,7 @@ main_args_list = [
     #
     # for model__activation_func in ["elu"]
     #
-    # for remove_nan_samples_perc in [10]
+    # for remove_nan_samples_perc_2 in [10]
     #
     # for test_ratio in [0.2]
 
@@ -144,7 +144,7 @@ main_args_list = [
 
     for model__activation_func in ["elu", "relu"]
 
-    for remove_nan_samples_perc in [10, 30]
+    for remove_nan_samples_perc_2 in [10, 30]
 
     for test_ratio in [0.2]
 
@@ -182,7 +182,7 @@ main_args_list = [
     #
     # for model__activation_func in ["elu"]
     #
-    # for remove_nan_samples_perc in [20]
+    # for remove_nan_samples_perc_2 in [20]
     #
     # for test_ratio in [0.2]
 

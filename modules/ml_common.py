@@ -12,6 +12,14 @@ print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
 print(f"torch.backends.mps.is_available(): {torch.backends.mps.is_available()}")
 
 
+def get_df_with_cols(df, cols):
+    for col in cols:
+        if col not in df.columns:
+            cols.remove(col)
+    df = df[cols]
+    return df
+
+
 def get_config_id(config):
     if not isinstance(config, dict):
         raise ValueError(f"config needs to be of type dict, but it's instead '{type(config)}'.")
