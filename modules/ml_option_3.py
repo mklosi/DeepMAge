@@ -2,6 +2,7 @@ from collections import defaultdict
 import hashlib
 import json
 import random
+from copy import deepcopy
 from pathlib import Path
 
 import joblib
@@ -26,7 +27,6 @@ pd.set_option('display.max_rows', 20)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', None)
 
-# &&&
 breakpointer = False
 
 
@@ -36,75 +36,10 @@ def set_seeds(seed=42):
     torch.manual_seed(seed)  # Only this one actually matters (empirically), but leaving the others for reference.
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-    # # &&&
     # torch.use_deterministic_algorithms(True)
 
 
 set_seeds()
-
-# &&& remove or store these somewhere.
-# class DeepMAgeModel(nn.Module):
-#     """Deep neural network for age prediction."""
-#
-#     def __init__(self, config):
-#         super(DeepMAgeModel, self).__init__()
-#         self.config = config
-#         self.fc1 = nn.Linear(self.config["input_dim"], self.config["layer2_in"])
-#         self.fc2 = nn.Linear(self.config["layer2_in"], self.config["layer3_in"])
-#         self.fc3 = nn.Linear(self.config["layer3_in"], self.config["layer4_in"])
-#         self.fc4 = nn.Linear(self.config["layer4_in"], self.config["layer5_in"])
-#         self.fc5 = nn.Linear(self.config["layer5_in"], 1)
-#         self.dropout = nn.Dropout(self.config["dropout"])
-#         activation_funcs = {
-#             "elu": nn.ELU(),
-#             "relu": nn.ReLU(),
-#         }
-#         self.activation_func = activation_funcs[self.config["activation_func"]]
-#
-#     def forward(self, x):
-#         x = self.activation_func(self.fc1(x))
-#         x = self.dropout(x)
-#         x = self.activation_func(self.fc2(x))
-#         x = self.dropout(x)
-#         x = self.activation_func(self.fc3(x))
-#         x = self.dropout(x)
-#         x = self.activation_func(self.fc4(x))
-#         x = self.dropout(x)
-#         x = self.fc5(x)
-#         return x
-# class DeepMAgeModel(nn.Module):
-#     """Deep neural network for age prediction with configurable inner layers."""
-#
-#     def __init__(self, config):
-#         super(DeepMAgeModel, self).__init__()
-#         self.config = config
-#         inner_layers = self.config["inner_layers"]
-#         dropout = self.config["dropout"]
-#         activation_funcs = {
-#             "elu": nn.ELU(),
-#             "relu": nn.ReLU(),
-#         }
-#         activation_func = activation_funcs[self.config["activation_func"]]
-#
-#         # Create the layers dynamically
-#         layers = []
-#         input_dim = self.config["input_dim"]
-#         for i, layer_dim in enumerate(inner_layers):
-#             layers.append(nn.Linear(input_dim, layer_dim))
-#             layers.append(activation_func)
-#             # Add dropout only if not the final hidden layer
-#             if i < len(inner_layers) - 1:
-#                 layers.append(nn.Dropout(dropout))
-#             input_dim = layer_dim
-#
-#         # Add the final layer (output layer)
-#         layers.append(nn.Linear(input_dim, 1))
-#
-#         # Use nn.Sequential to combine all layers into a single module
-#         self.network = nn.Sequential(*layers)
-#
-#     def forward(self, x):
-#         return self.network(x)
 
 
 class DeepMAgeModel(nn.Module):
@@ -173,20 +108,20 @@ class DeepMAgePredictor(DeepMAgeBase):
         self.config_id = get_config_id(self.config)
         self.normalization_strategy = self.config["normalization_strategy"]
         self.split_train_test_by_percent = self.config["split_train_test_by_percent"]
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else
-            "mps" if torch.backends.mps.is_available()
-            else "cpu"
-        )
+        self.k_folds = self.config["k_folds"]
+
+        # self.device = torch.device(
+        #     "cuda" if torch.cuda.is_available() else
+        #     "mps" if torch.backends.mps.is_available()
+        #     else "cpu"
+        # )
+        self.device = "cpu"
+
         self.imputer = SimpleImputer(strategy=self.config["imputation_strategy"])
         self.scaler = MinMaxScaler(feature_range=(0.0, 1.0))
         model_class_name = config["model.model_class"]
         model_class = globals()[model_class_name]
         self.model = model_class(config=self.config).to(self.device)
-
-        # # &&&
-        # print(f"self.model: {self.model}")
-
         self.criterions = {
             "mse": nn.MSELoss(),
             "mae": nn.L1Loss(),  # Computes Mean Absolute Error (MAE)
@@ -368,11 +303,9 @@ class DeepMAgePredictor(DeepMAgeBase):
     def split_data_by_percent(self, df):
         return train_test_split(df, test_size=self.config["test_ratio"], random_state=42)
 
-    def train(self, train_df):
+    def train(self, train_data, val_data):
         print(f"Training model...")
         train_dt = datetime.now()
-
-        train_data, val_data = self.split_data_by_percent(train_df)
 
         features_train, ages_train = self.prepare_features(train_data, is_training=True)
         features_val, ages_val = self.prepare_features(val_data, is_training=False)
@@ -392,13 +325,16 @@ class DeepMAgePredictor(DeepMAgeBase):
         )
 
         # Early stopper
-        best_loss = float('inf')
+        best_val_loss = float('inf')
+        best_state = None
         patience_counter = 0
+
+        self.model = torch.compile(self.model, backend="aot_eager").to(self.device)
 
         for epoch in range(self.config["max_epochs"]):
             # print(f"--- Epoch '{epoch + 1}/{epochs}' --------------------")
             self.model.train()
-            epoch_loss = 0
+            train_loss = 0
             for i, batch in enumerate(train_loader):
                 # print(f"Processing batch: {i+1}/{len(train_loader)}")
 
@@ -412,14 +348,14 @@ class DeepMAgePredictor(DeepMAgeBase):
                 loss = self.criterions[self.config["loss_name"]](predictions, ages)
                 loss.backward()
                 self.optimizer.step()
-                epoch_loss += loss.item()
+                train_loss += loss.item()
 
-            val_loss = self.validate(val_loader)
+            val_loss = self.validate(val_loader, self.config["loss_name"])
             print(
                 f"config_id '{self.config_id}', "
                 f"Epoch '{epoch+1}/{self.config['max_epochs']}', "
                 f"lr: '{round(lr_scheduler.get_last_lr()[0], 10)}', "
-                f"Train Loss: {epoch_loss / len(train_loader):,.6f}, "
+                f"Train Loss: {train_loss / len(train_loader):,.6f}, "
                 f"Val Loss: {val_loss:,.6f}"
             )
 
@@ -427,19 +363,42 @@ class DeepMAgePredictor(DeepMAgeBase):
             lr_scheduler.step(val_loss)
 
             # Early stopper
-            if val_loss < best_loss - self.config["early_stop_threshold"]:
-                best_loss = val_loss
+            if val_loss < best_val_loss - self.config["early_stop_threshold"]:
+                best_val_loss = val_loss
                 patience_counter = 0
+                # Save best state
+                best_state = {
+                    "model_state_dict": deepcopy(self.model.state_dict()),
+                    "optimizer_state_dict": deepcopy(self.optimizer.state_dict()),
+                    "predictor_state": deepcopy(self),
+                }
             else:
                 patience_counter += 1
             if patience_counter >= self.config["early_stop_patience"]:
                 print(f"Early stopping triggered. No improvement for '{self.config['early_stop_patience']}' epochs.")
                 break
 
-        mem.log_memory(print, "train")
+        # Restore best state
+        self.__dict__.update(best_state["predictor_state"].__dict__)
+        self.model.load_state_dict(best_state["model_state_dict"])
+        self.optimizer.load_state_dict(best_state["optimizer_state_dict"])
+
+        result_dict = {
+            loss_name: self.validate(val_loader, loss_name) for loss_name in self.criterions
+        }
+        latest_val_loss = result_dict[self.config["loss_name"]]
+        if best_val_loss != latest_val_loss:
+            raise ValueError(
+                f"Missmatch between best validation loss '{best_val_loss}' "
+                f"and latest validation loss '{latest_val_loss}'."
+            )
+
+        # mem.log_memory(print, "train")
         print(f"train runtime: {datetime.now() - train_dt}")
 
-    def validate(self, val_loader):
+        return result_dict
+
+    def validate(self, val_loader, loss_name):
         self.model.eval()
         total_loss = 0
         with torch.no_grad():
@@ -447,10 +406,41 @@ class DeepMAgePredictor(DeepMAgeBase):
                 features = batch["features"].to(self.device)
                 ages = batch["age"].to(self.device)
                 predictions = self.model(features).squeeze()
-                loss = self.criterions[self.config["loss_name"]](predictions, ages)
+                loss = self.criterions[loss_name](predictions, ages)
                 total_loss += loss.item()
         val_loss = total_loss / len(val_loader)
         return val_loss
+
+    def cross_train(self, train_df):
+        """
+        Perform k-fold cross-validation on the model.
+
+        Args:
+            train_df (pd.DataFrame): The full train dataset to split into folds.
+
+        Returns:
+            dict: Average metrics across all folds.
+        """
+
+        print(f"Starting '{self.k_folds}'-fold cross-validation...")
+        kfold = KFold(n_splits=self.k_folds, shuffle=True, random_state=42)
+        fold_metrics = []
+
+        for fold_counter, (train_indices, val_indices) in enumerate(kfold.split(train_df)):
+            print(f"Fold '{fold_counter+1}/{self.k_folds}'...")
+            train_data = train_df.iloc[train_indices]
+            val_data = train_df.iloc[val_indices]
+
+            self.__init__(self.config)
+            fold_result = self.train(train_data, val_data)
+            fold_metrics.append(fold_result)
+
+        result_dict = {metric: np.mean([fold[metric] for fold in fold_metrics]) for metric in fold_metrics[0]}
+
+        for name, value in result_dict.items():
+            print(f"Cross-validation '{name}': {value}")
+
+        return result_dict
 
     def test_(self, test_df): # &&& rename after.
         print("Testing model...")
@@ -525,8 +515,15 @@ class DeepMAgePredictor(DeepMAgeBase):
         else:
             train_df, test_df = self.split_data_by_type(df)
 
-        # # Regular train on a single fold, test, and save a model.
-        self.train(train_df)
+
+        if self.k_folds == 1:
+            # Regular train on a single fold.
+            train_data, val_data = self.split_data_by_percent(train_df)
+            result_dict = self.train(train_data, val_data)
+        else:
+            # k-fold train
+            result_dict = self.cross_train(train_df)
+
         # self.save_predictor()
 
         # Loading a Saved Model and test again.
@@ -534,7 +531,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         # Make sure that even if we shuffle test_df, we still get the same metrics.
         # test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
 
-        result_dict = self.test_(test_df)
+        # result_dict = self.test_(test_df)
 
         return result_dict
 

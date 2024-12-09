@@ -43,12 +43,12 @@ time.tzset()
 default_loss_name = "medae"
 
 # &&& param
-results_base_path = "result_artifacts"
-# results_base_path = "result_artifacts_temp"
+# results_base_path = "result_artifacts"
+results_base_path = "result_artifacts_temp"
 
 # &&& param
 # study_name = get_config_id(search_space)[:16]  # Half of actual length.
-study_name = "study-4"
+study_name = "study-5"
 
 study_db_url = f"sqlite:///{results_base_path}/studies.db"
 lock_path = Path(f"{results_base_path}/result_df.lock")
@@ -65,117 +65,119 @@ def get_config(trial):
 
     # &&& param
 
-    search_space = {  # big run
-
-        "batch_size": trial.suggest_int("batch_size", 8, 1024, step=8),
-
-        "early_stop_patience": trial.suggest_int("early_stop_patience", 100, 100),
-
-        "early_stop_threshold": round(trial.suggest_float("early_stop_threshold", 0.3, 0.6, step=0.01), 2),
-
-        "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean"]),
-
-        "loss_name": trial.suggest_categorical("loss_name", [default_loss_name]),
-
-        "lr_factor": round(trial.suggest_float("lr_factor", 0.2, 0.5, step=0.01), 2),
-
-        "lr_init": round(trial.suggest_float("lr_init", 0.00001, 0.001, step=0.00001), 5),
-
-        "lr_patience": trial.suggest_int("lr_patience", 50, 50),
-
-        "lr_threshold": round(trial.suggest_float("lr_threshold", 0.25, 0.45, step=0.01), 2),
-
-        "max_epochs": trial.suggest_int("max_epochs", 999, 999),
-
-        "model.activation_func": trial.suggest_categorical("model.activation_func", [
-            "celu", "elu", "gelu", "leakyrelu", "relu", "silu",
-        ]),
-
-        "model.dropout": round(trial.suggest_float("model.dropout", 0.0, 0.2, step=0.01), 2),
-
-        "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
-            json.dumps([512, 512, 256, 128]),
-            json.dumps([256, 128, 64]),
-            json.dumps([128, 64]),
-            json.dumps([32]),
-        ]),
-
-        "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
-
-        "model.model_class": trial.suggest_categorical("model.model_class", ["DeepMAgeModel"]),
-
-        "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site"]),
-
-        "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
-
-        "remove_nan_samples_perc_2": trial.suggest_int("remove_nan_samples_perc_2", 0, 100, step=10),
-
-        "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [False]),
-
-        "test_ratio": trial.suggest_float("test_ratio", 0.2, 0.2),
-
-        "weight_decay": round(trial.suggest_float("weight_decay", 0.0, 0.5, step=0.01), 2),
-
-    }
-
-    # search_space = {  # benchmark run
-    #     "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
+    # search_space = {  # big run
     #
-    #     # "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean"]),
-    #     "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["median"]),
+    #     "batch_size": trial.suggest_int("batch_size", 8, 1024, step=8),
     #
-    #     # "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site"]),
-    #     "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_study_per_site"]),
-    #     # "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site", "per_study_per_site"]),
+    #     "early_stop_patience": trial.suggest_int("early_stop_patience", 100, 100),
     #
-    #     "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [True]),
+    #     "early_stop_threshold": round(trial.suggest_float("early_stop_threshold", 0.3, 0.6, step=0.01), 2),
     #
-    #     # "max_epochs": trial.suggest_int("max_epochs", 999, 999),
-    #     "max_epochs": trial.suggest_int("max_epochs", 2, 3),
+    #     "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean"]),
     #
-    #     # "batch_size": trial.suggest_int("batch_size", 32, 32),
-    #     # "batch_size": trial.suggest_int("batch_size", 64, 64),
-    #     "batch_size": trial.suggest_int("batch_size", 32, 64, step=32),
+    #     "loss_name": trial.suggest_categorical("loss_name", [default_loss_name]),
     #
-    #     "lr_init": trial.suggest_float("lr_init", 0.001, 0.001),
+    #     "lr_factor": round(trial.suggest_float("lr_factor", 0.2, 0.5, step=0.01), 2),
     #
-    #     "weight_decay": trial.suggest_float("weight_decay", 0.001, 0.001),
+    #     "lr_init": round(trial.suggest_float("lr_init", 0.00001, 0.001, step=0.00001), 5),
     #
-    #     "lr_factor": trial.suggest_float("lr_factor", 0.5, 0.5),
+    #     "lr_patience": trial.suggest_int("lr_patience", 50, 50),
     #
-    #     "lr_patience": trial.suggest_int("lr_patience", 10, 10),
+    #     "lr_threshold": round(trial.suggest_float("lr_threshold", 0.25, 0.45, step=0.01), 2),
     #
-    #     "lr_threshold": trial.suggest_float("lr_threshold", 0.001, 0.001),
+    #     "max_epochs": trial.suggest_int("max_epochs", 999, 999),
     #
-    #     "early_stop_patience": trial.suggest_int("early_stop_patience", 30, 30),
+    #     "model.activation_func": trial.suggest_categorical("model.activation_func", [
+    #         "celu", "elu", "gelu", "leakyrelu", "relu", "silu",
+    #     ]),
     #
-    #     "early_stop_threshold": trial.suggest_float("early_stop_threshold", 0.001, 0.001),
+    #     "model.dropout": round(trial.suggest_float("model.dropout", 0.0, 0.2, step=0.01), 2),
     #
-    #     "model.model_class": trial.suggest_categorical("model.model_class", ["DeepMAgeModel"]),
+    #     "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
+    #         json.dumps([512, 512, 256, 128]),
+    #         json.dumps([256, 128, 64]),
+    #         json.dumps([128, 64]),
+    #         json.dumps([32]),
+    #     ]),
     #
     #     "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
     #
-    #     # &&& get more creative here. also fix number of actual hidden layers are -1.
-    #     "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
-    #         json.dumps([
-    #             trial.suggest_int("hl1", 512, 512),
-    #             trial.suggest_int("hl2", 512, 512),
-    #             trial.suggest_int("hl3", 256, 256),
-    #             trial.suggest_int("hl4", 128, 128),
-    #         ]),
-    #         # more options here.
-    #     ]),
+    #     "model.model_class": trial.suggest_categorical("model.model_class", ["DeepMAgeModel"]),
     #
-    #     "model.dropout": trial.suggest_float("model.dropout", 0.1, 0.1),
+    #     "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site"]),
     #
-    #     "model.activation_func": trial.suggest_categorical("model.activation_func", ["elu"]),
+    #     "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
     #
-    #     "remove_nan_samples_perc_2": trial.suggest_int("remove_nan_samples_perc_2", 30, 30),
+    #     "remove_nan_samples_perc_2": trial.suggest_int("remove_nan_samples_perc_2", 0, 100, step=10),
+    #
+    #     "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [False]),
     #
     #     "test_ratio": trial.suggest_float("test_ratio", 0.2, 0.2),
     #
-    #     "loss_name": trial.suggest_categorical("loss_name", [default_loss_name]),
+    #     "weight_decay": round(trial.suggest_float("weight_decay", 0.0, 0.5, step=0.01), 2),
+    #
     # }
+
+    search_space = {  # benchmark run
+        "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
+
+        # "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean"]),
+        "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["median"]),
+
+        # "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site"]),
+        "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_study_per_site"]),
+        # "normalization_strategy": trial.suggest_categorical("normalization_strategy", ["per_site", "per_study_per_site"]),
+
+        "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [False]),
+
+        "k_folds": trial.suggest_int("k_folds", 1, 1),
+
+        # "max_epochs": trial.suggest_int("max_epochs", 999, 999),
+        "max_epochs": trial.suggest_int("max_epochs", 2, 3),
+
+        # "batch_size": trial.suggest_int("batch_size", 32, 32),
+        # "batch_size": trial.suggest_int("batch_size", 64, 64),
+        "batch_size": trial.suggest_int("batch_size", 32, 64, step=32),
+
+        "lr_init": trial.suggest_float("lr_init", 0.001, 0.001),
+
+        "weight_decay": trial.suggest_float("weight_decay", 0.001, 0.001),
+
+        "lr_factor": trial.suggest_float("lr_factor", 0.5, 0.5),
+
+        "lr_patience": trial.suggest_int("lr_patience", 10, 10),
+
+        "lr_threshold": trial.suggest_float("lr_threshold", 0.001, 0.001),
+
+        "early_stop_patience": trial.suggest_int("early_stop_patience", 30, 30),
+
+        "early_stop_threshold": trial.suggest_float("early_stop_threshold", 0.001, 0.001),
+
+        "model.model_class": trial.suggest_categorical("model.model_class", ["DeepMAgeModel"]),
+
+        "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
+
+        # &&& get more creative here. also fix number of actual hidden layers are -1.
+        "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
+            json.dumps([
+                trial.suggest_int("hl1", 512, 512),
+                trial.suggest_int("hl2", 512, 512),
+                trial.suggest_int("hl3", 256, 256),
+                trial.suggest_int("hl4", 128, 128),
+            ]),
+            # more options here.
+        ]),
+
+        "model.dropout": trial.suggest_float("model.dropout", 0.1, 0.1),
+
+        "model.activation_func": trial.suggest_categorical("model.activation_func", ["elu"]),
+
+        "remove_nan_samples_perc_2": trial.suggest_int("remove_nan_samples_perc_2", 30, 30),
+
+        "test_ratio": trial.suggest_float("test_ratio", 0.2, 0.2),
+
+        "loss_name": trial.suggest_categorical("loss_name", [default_loss_name]),
+    }
 
     # search_space = {  # dev run
     #     "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
@@ -392,7 +394,7 @@ def main(override, restart):
             print(f"Saved result_df to: {result_df_path}")
             print(f"Lock released in '{func_name}'. Process name: '{getproctitle()}'. Pid: '{os.getpid()}'.")
 
-        print(f"result_df:\n{result_df[relevant_cols].drop(columns='config')}")
+        print(f"result_df:\n{result_df[relevant_cols].drop(columns=['config', 'study_name'])}")
 
         # no need for this anymore.
         # joblib.dump(study, study_path)
@@ -406,8 +408,8 @@ def main(override, restart):
         study.optimize(
             objective,
             # &&& param
-            # n_trials=10,
-            n_trials=9999,
+            n_trials=40,
+            # n_trials=9999,
             timeout=None,
             n_jobs=1,
             callbacks=[save_study_callback],

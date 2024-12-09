@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime
 import joblib
 import pandas as pd
@@ -23,6 +24,17 @@ def get_df_with_cols(df, cols):
 def get_config_id(config):
     if not isinstance(config, dict):
         raise ValueError(f"config needs to be of type dict, but it's instead '{type(config)}'.")
+
+    # Remove new hyperparams with default values, in order to avoid rerunning the same tests. Backward compatibility.
+    del_dict = {
+        "k_folds": 1,
+    }
+    config = {
+        key: config[key]
+        for key in config
+        if key not in config or key not in del_dict or config[key] != del_dict[key]
+    }
+
     config = {key: config[key] for key in sorted(config)}
     config_json = json.dumps(config)
     config_id = hashlib.md5(config_json.encode("utf8")).hexdigest()
