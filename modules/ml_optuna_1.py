@@ -61,7 +61,7 @@ relevant_cols = ["config_id", "datetime_start", "duration", "medae", "mae", "mse
 
 def get_config(trial):
 
-    # &&& move these into arg module.
+    # TODO move these into arg module.
 
     # &&& param
 
@@ -69,7 +69,7 @@ def get_config(trial):
 
         "batch_size": trial.suggest_categorical("batch_size", [16, 32, 64, 128]),
 
-        "early_stop_patience": trial.suggest_int("early_stop_patience", 50, 50),
+        "early_stop_patience": trial.suggest_int("early_stop_patience", 50, 100, step=50),
 
         "early_stop_threshold": round(trial.suggest_float("early_stop_threshold", 0.0001, 0.0001), 4),
 
@@ -161,7 +161,7 @@ def get_config(trial):
     #
     #     "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
     #
-    #     # &&& get more creative here. also fix number of actual hidden layers are -1.
+    #     # TODO get more creative here. also fix number of actual hidden layers are -1.
     #     "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
     #         json.dumps([
     #             trial.suggest_int("hl1", 512, 512),
@@ -220,7 +220,7 @@ def get_config(trial):
     #
     #     "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
     #
-    #     # &&& get more creative here. also fix number of actual hidden layers are -1.
+    #     # TODO get more creative here. also fix number of actual hidden layers are -1.
     #     "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
     #         json.dumps([
     #             trial.suggest_int("hl1", 512, 512),
@@ -244,7 +244,7 @@ def get_config(trial):
 
     return search_space
 
-# &&& for safekeeping
+# TODO for safekeeping
 # search_space = {key: search_space[key] for key in sorted(search_space)}  # This is needed to correctly get ids.
 # search_space = {key: sorted(search_space[key]) for key in sorted(search_space)}  # This is needed to correctly get ids.
 # search_space = {key: sorted([search_space[key]]) for key in sorted(search_space)}  # This is needed to correctly get ids.
@@ -291,9 +291,24 @@ def main(override, restart):
     mem = Memory(noop=False)
     start_dt = datetime.now()
 
-    # search_space: Mapping[str, Sequence[GridValueType]] = {}
-    # sampler = GridSampler(search_space, seed=42) # &&& is there a way to fix this?
+    ## &&& param
 
+    n_trials = 9999
+    # n_trials = 30
+
+    # n_startup_trials = n_trials  # This effectively disables pruning.
+    n_startup_trials = 10
+
+    n_min_trials = n_startup_trials
+
+    pruner = optuna.pruners.MedianPruner(
+        n_startup_trials=n_startup_trials,
+        n_warmup_steps=5,
+        n_min_trials=n_min_trials,
+    )
+
+    # search_space: Mapping[str, Sequence[GridValueType]] = {}
+    # sampler = GridSampler(search_space, seed=42) # TODO is there a way to fix this?
     sampler = TPESampler()
 
     print(f"Using {sampler.__class__.__name__}.")
@@ -304,6 +319,7 @@ def main(override, restart):
     study = optuna.create_study(
         study_name=study_name,
         direction="minimize",
+        pruner=pruner,
         sampler=sampler,
         storage=study_db_url,
         load_if_exists=True,
@@ -311,9 +327,9 @@ def main(override, restart):
 
     print_study_counts(study, sampler)
 
-    fjdkfjd = 1 # &&&
+    fjdkfjd = 1
 
-    # &&& do these two functions need to be here inside now?
+    # TODO do these two functions need to be here inside now?
     def objective(trial):
 
         set_seeds()  # Reset seeds for reproducibility
@@ -345,7 +361,7 @@ def main(override, restart):
             # noinspection PyTypeChecker
             predictor_class = globals()[predictor_class_name]
             predictor = predictor_class(config)
-            result_dict = predictor.train_pipeline()
+            result_dict = predictor.train_pipeline(trial)
 
         # Attach custom attributes
         trial.set_user_attr("config", json.dumps(config))
@@ -362,7 +378,7 @@ def main(override, restart):
     ## trial
     # noinspection PyShadowingNames
     ## study
-    # &&& can I move all the df code at the end of the objective func?
+    # TODO can I move all the df code at the end of the objective func?
     def save_study_callback(study, trial):
 
         curr_df = study.trials_dataframe()
@@ -371,7 +387,7 @@ def main(override, restart):
         cols_dict = {col: col.replace('user_attrs_', '') for col in curr_df.columns}
         curr_df = curr_df.rename(columns=cols_dict)
 
-        # # &&& mod values, if needed.
+        # # TODO mod values, if needed.
         # index_to_update = curr_df[curr_df[config_id_str] == "b7c65ed3969908def6261778cc2a4c2a"].index[0]
         # curr_df.loc[index_to_update, default_loss_name] = 16.955668
 
@@ -412,9 +428,7 @@ def main(override, restart):
     if isinstance(sampler, TPESampler) or not sampler.is_exhausted(study):
         study.optimize(
             objective,
-            # &&& param
-            # n_trials=30,
-            n_trials=9999,
+            n_trials=n_trials,
             timeout=None,
             n_jobs=1,
             callbacks=[save_study_callback],
@@ -440,9 +454,8 @@ if __name__ == "__main__":
     setproctitle(process_name)
     print(f"Main process name: '{getproctitle()}'. Pid: '{os.getpid()}'.")
 
-    # &&& param
     # override - rerun trails even if they are in the result_df.
     # overwrite - set result_df to study.trials_dataframe() on each save callback.
-    #   &&& maybe get that back in, once we move to true multiprocessing.
+    #   TODO maybe get that back in, once we move to true multiprocessing.
     # restart - restart a study.
     main(override=False, restart=False)

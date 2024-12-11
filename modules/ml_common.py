@@ -78,14 +78,14 @@ class MethylationDataset(Dataset):
         return sample
 
 
-class DeepMAgeBase: # &&& do we even need this?
+class DeepMAgeBase: # TODO do we even need this?
     pass
 
     # @classmethod
     # def load_model(cls, model_path):
     #     raise NotImplementedError()
     #
-    # @classmethod # &&& not needed.
+    # @classmethod # TODO not needed.
     # def new_model(cls):
     #     raise NotImplementedError()
     #

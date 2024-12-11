@@ -4,11 +4,13 @@ import json
 import random
 from copy import deepcopy
 from pathlib import Path
+from time import sleep
 
 import joblib
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from optuna import exceptions, Trial
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import KFold, train_test_split
@@ -28,6 +30,8 @@ pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', None)
 
 breakpointer = False
+
+step_ = 0
 
 
 def set_seeds(seed=42):
@@ -101,7 +105,7 @@ class DeepMAgePredictor(DeepMAgeBase):
     methyl_df_path = "resources/methylation_data.parquet"
 
     age_col_str = "actual_age_years"
-    metadata_cols = ["gse_id", "type", age_col_str] # &&& can I be reminded of the benefit of doing cls vs. self?
+    metadata_cols = ["gse_id", "type", age_col_str] # TODO can I be reminded of the benefit of doing cls vs. self?
 
     def __init__(self, config):
         self.config = config
@@ -190,7 +194,7 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         df = df[df["type"].isin(["train", "verification"])]
 
-        # # &&&
+        # # TODO
         # ## Show which gsm_ids have missing values and the corresponding cpg sites that contain those nans.
         # nan_counts = df.isna().sum(axis=1)  # Count NaNs per GSM ID
         # gsm_ids_with_nans = nan_counts[nan_counts > 0]
@@ -204,7 +208,6 @@ class DeepMAgePredictor(DeepMAgeBase):
         # })
         # gsm_ids_with_nans_sorted_df = gsm_ids_with_nans_df.sort_values(by="nan_count", ascending=False)
         #
-        # # &&&
         # ## Show which cpg site ids have missing values and the corresponding gsm_ids that contain those nans.
         # nan_counts_per_cpg = df.isna().sum(axis=0)
         # cpg_sites_with_nans = nan_counts_per_cpg[nan_counts_per_cpg > 0]
@@ -237,7 +240,7 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         metadata_df, methyl_df = self.split_df(df)
 
-        # &&&
+        # TODO Remove these.
 
         # # Make sure all values are numeric. Without this we were having issues with the 'mean' imputation strategy.
         # methyl_df = methyl_df.apply(pd.to_numeric, errors='coerce')
@@ -252,7 +255,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         # import sys
         # sys.exit()
 
-        # &&& end
+        # TODO end
 
         ## impute #$ docs
         if is_training:
@@ -303,7 +306,7 @@ class DeepMAgePredictor(DeepMAgeBase):
     def split_data_by_percent(self, df):
         return train_test_split(df, test_size=self.config["test_ratio"], random_state=42)
 
-    def train(self, train_data, val_data):
+    def train(self, train_data, val_data, trial: Trial):
         print(f"Training model...")
         train_dt = datetime.now()
 
@@ -350,14 +353,24 @@ class DeepMAgePredictor(DeepMAgeBase):
                 self.optimizer.step()
                 train_loss += loss.item()
 
+            global step_
+
             val_loss = self.validate(val_loader, self.config["loss_name"])
             print(
                 f"config_id '{self.config_id}', "
                 f"Epoch '{epoch+1}/{self.config['max_epochs']}', "
+                f"Step '{step_}', "
                 f"lr: '{round(lr_scheduler.get_last_lr()[0], 10)}', "
                 f"Train Loss: {train_loss / len(train_loader):,.6f}, "
                 f"Val Loss: {val_loss:,.6f}"
             )
+
+            # Pruning
+            trial.report(val_loss, step_)
+            if trial.should_prune():
+                print(f"Trial '{trial.number}' pruned at step '{step_}'.")
+                raise exceptions.TrialPruned()
+            step_ += 1
 
             # Learning rate scheduler
             lr_scheduler.step(val_loss)
@@ -412,7 +425,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         val_loss = total_loss / len(val_loader)
         return val_loss
 
-    def cross_train(self, train_df):
+    def cross_train(self, train_df, trial):
         """
         Perform k-fold cross-validation on the model.
 
@@ -427,13 +440,13 @@ class DeepMAgePredictor(DeepMAgeBase):
         kfold = KFold(n_splits=self.k_folds, shuffle=True, random_state=42)
         fold_metrics = []
 
-        for fold_counter, (train_indices, val_indices) in enumerate(kfold.split(train_df)):
-            print(f"Fold '{fold_counter+1}/{self.k_folds}'...")
+        for k_fold, (train_indices, val_indices) in enumerate(kfold.split(train_df)):
+            print(f"Fold '{k_fold+1}/{self.k_folds}'...")
             train_data = train_df.iloc[train_indices]
             val_data = train_df.iloc[val_indices]
 
             self.__init__(self.config)
-            fold_result = self.train(train_data, val_data)
+            fold_result = self.train(train_data, val_data, trial)
             fold_metrics.append(fold_result)
 
         result_dict = {metric: np.mean([fold[metric] for fold in fold_metrics]) for metric in fold_metrics[0]}
@@ -443,7 +456,7 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         return result_dict
 
-    def test_(self, test_df): # &&& rename after.
+    def test_(self, test_df): # TODO rename after.
         print("Testing model...")
 
         features_test, ages_test = self.prepare_features(test_df, is_training=False)
@@ -508,7 +521,10 @@ class DeepMAgePredictor(DeepMAgeBase):
         return predictions_df
 
 
-    def train_pipeline(self):
+    def train_pipeline(self, trial):
+
+        global step_
+        step_ = 0
 
         df = self.load_data()
         if self.split_train_test_by_percent:
@@ -520,17 +536,17 @@ class DeepMAgePredictor(DeepMAgeBase):
         if self.k_folds == 1:
             # Regular train on a single fold.
             train_data, val_data = self.split_data_by_percent(train_df)
-            result_dict = self.train(train_data, val_data)
+            result_dict = self.train(train_data, val_data, trial)
         else:
             # k-fold train
-            result_dict = self.cross_train(train_df)
+            result_dict = self.cross_train(train_df, trial)
 
         # self.save_predictor()
 
         # Loading a Saved Model and test again.
         # self.load()
         # Make sure that even if we shuffle test_df, we still get the same metrics.
-        # test_df = test_df.sample(frac=1, random_state=24) # &&& does this even work?
+        # test_df = test_df.sample(frac=1, random_state=24) # TODO does this even work?
 
         # result_dict = self.test_(test_df)
 
