@@ -42,17 +42,17 @@ if __name__ == '__main__':
     dfs = []
 
     storage_urls = [
-        f"sqlite:///{results_base_path}/studies_2024-12-07.db",
+        # f"sqlite:///{results_base_path}/studies_2024-12-07.db",
         f"sqlite:///{results_base_path}/studies.db",
     ]
 
     for storage_url in storage_urls:
         print(f"=== storage_url: {storage_url} ===============================================")
 
-        study_summaries = optuna.study.get_all_study_summaries(storage=storage_url)
-        print(f"Study count: {len(study_summaries)}")
-        for study_summary in study_summaries:
-            study_name = study_summary.study_name
+        study_names = optuna.study.get_all_study_names(storage=storage_url)
+        print(f"Study count: {len(study_names)}")
+
+        for study_name in study_names:
             print(f"--- study_name: {study_name} ------------------------")
             study = optuna.load_study(study_name=study_name, storage=storage_url)
             print_study_counts(study)
@@ -79,7 +79,8 @@ if __name__ == '__main__':
 
             ## Plot
 
-            if storage_url == f"sqlite:///{results_base_path}/studies.db" and study_name == "study-4":
+            # &&& param &&&
+            if storage_url == f"sqlite:///{results_base_path}/studies.db" and study_name == "study-7":
 
                 print("plot_param_importances...")
                 fig = plot_param_importances(study)
