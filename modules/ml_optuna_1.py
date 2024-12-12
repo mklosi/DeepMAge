@@ -48,7 +48,7 @@ results_base_path = "result_artifacts"
 
 # &&& param
 # study_name = get_config_id(search_space)[:16]  # Half of actual length.
-study_name = "study-5"
+study_name = "study-7"
 
 study_db_url = f"sqlite:///{results_base_path}/studies.db"
 lock_path = Path(f"{results_base_path}/result_df.lock")
@@ -67,9 +67,9 @@ def get_config(trial):
 
     search_space = {  # big run
 
-        "batch_size": trial.suggest_categorical("batch_size", [16, 32, 64, 128]),
+        "batch_size": trial.suggest_categorical("batch_size", [8, 16, 32, 64, 128]),
 
-        "early_stop_patience": trial.suggest_int("early_stop_patience", 50, 100, step=50),
+        "early_stop_patience": trial.suggest_int("early_stop_patience", 100, 100, step=50),
 
         "early_stop_threshold": round(trial.suggest_float("early_stop_threshold", 0.0001, 0.0001), 4),
 
@@ -101,6 +101,8 @@ def get_config(trial):
             json.dumps([256, 128, 64]),
             json.dumps([128, 64]),
             json.dumps([32]),
+            json.dumps([16]),
+            json.dumps([32, 16]),
         ]),
 
         "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
@@ -134,6 +136,7 @@ def get_config(trial):
     #
     #     "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [False]),
     #
+    #     # "k_folds": trial.suggest_int("k_folds", 1, 1),
     #     "k_folds": trial.suggest_int("k_folds", 5, 5),
     #
     #     # "max_epochs": trial.suggest_int("max_epochs", 999, 999),
@@ -297,13 +300,13 @@ def main(override, restart):
     # n_trials = 30
 
     # n_startup_trials = n_trials  # This effectively disables pruning.
-    n_startup_trials = 10
+    n_startup_trials = 20
 
     n_min_trials = n_startup_trials
 
     pruner = optuna.pruners.MedianPruner(
         n_startup_trials=n_startup_trials,
-        n_warmup_steps=5,
+        n_warmup_steps=20,
         n_min_trials=n_min_trials,
     )
 
@@ -351,7 +354,11 @@ def main(override, restart):
                 print(f"WARNING: Duplicate rows with different '{default_loss_name}' values found for config_id: {config_id}")
                 for result in results:
                     print(f"\t{default_loss_name}: {result[default_loss_name]}")
-                result_dict = min(results, key=lambda x: x[default_loss_name])
+                result_dict = min(
+                    results, key=lambda x: x[default_loss_name]
+                    if isinstance(x[default_loss_name], float) else
+                    float("inf")
+                )
             else:
                 result_dict = results[0]
         else:
@@ -454,8 +461,9 @@ if __name__ == "__main__":
     setproctitle(process_name)
     print(f"Main process name: '{getproctitle()}'. Pid: '{os.getpid()}'.")
 
+    # &&& param
     # override - rerun trails even if they are in the result_df.
     # overwrite - set result_df to study.trials_dataframe() on each save callback.
     #   TODO maybe get that back in, once we move to true multiprocessing.
     # restart - restart a study.
-    main(override=False, restart=False)
+    main(override=True, restart=False)
