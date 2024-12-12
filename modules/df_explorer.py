@@ -1,12 +1,13 @@
 import sys
+from copy import deepcopy
 from pathlib import Path
 import json
 import numpy as np
 import pandas as pd
 from io import StringIO
 from memory import Memory
-from modules.ml_common import get_config_id
-from modules.ml_optuna_1 import config_id_str
+from modules.ml_common import get_config_id, get_df_with_cols
+from modules.ml_optuna_1 import config_id_str, relevant_cols
 from modules.ml_pipeline import default_loss_name
 
 
@@ -39,10 +40,20 @@ if __name__ == '__main__':
     df = pd.read_parquet(path)
     # df = pd.read_pickle(path)
 
-    # check for duplications
-    df_deduped = df.loc[df.groupby(["config_id"])['datetime_start'].idxmin()]
+    # # Remove rows where 'default_loss_name' is na.
+    # df = df[df[default_loss_name].notna()]
+    # df.to_parquet(path, engine='pyarrow', index=False)
+    # print(f"Saved df to: {path}")
 
-    fdjkfjddf = 1
+    df = get_df_with_cols(df, relevant_cols)
+    print(f"df:\n{df.drop(columns=['config'])}")
+
+    # check for duplications
+    duplicated_df = df[df.duplicated(subset=[config_id_str], keep=False)]
+    duplicated_df = duplicated_df.sort_values(by=[config_id_str])
+    print(f"duplicated_df:\n{duplicated_df.drop(columns=['config'])}")
+
+    fjkdfd = 1
 
     # Find out the best config so far.
     df = df.sort_values(by=default_loss_name)
