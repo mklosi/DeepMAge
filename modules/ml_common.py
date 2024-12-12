@@ -14,10 +14,11 @@ print(f"torch.backends.mps.is_available(): {torch.backends.mps.is_available()}")
 
 
 def get_df_with_cols(df, cols):
+    cols_ = deepcopy(cols)
     for col in cols:
         if col not in df.columns:
-            cols.remove(col)
-    df = df[cols]
+            cols_.remove(col)
+    df = df[cols_]
     return df
 
 
