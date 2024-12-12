@@ -410,11 +410,29 @@ def main(override, restart):
             cols = relevant_cols + sorted(set(result_df.columns) - set(relevant_cols))
             result_df = result_df[cols]
 
+
+            # &&& this is temporary
+            # check for duplications
+            duplicated_df = result_df[result_df.duplicated(subset=[config_id_str], keep=False)]
+            duplicated_df = duplicated_df.sort_values(by=[config_id_str])
+            print(f"AAA duplicated_df 1:\n{duplicated_df.drop(columns=['config'])}")
+
+
+
             # Deduplicate based on config_id and similar 'default_loss_name' values, but without modifying the original precision.
             default_loss_name_rounded = f'{default_loss_name}_rounded'
             result_df[default_loss_name_rounded] = result_df[default_loss_name].round(6)
             result_df = result_df.drop_duplicates(subset=[config_id_str, default_loss_name_rounded], keep="last", ignore_index=True)
             result_df = result_df.drop(columns=[default_loss_name_rounded])
+
+
+            # &&& this is temporary
+            # check for duplications
+            duplicated_df = result_df[result_df.duplicated(subset=[config_id_str], keep=False)]
+            duplicated_df = duplicated_df.sort_values(by=[config_id_str])
+            print(f"AAA duplicated_df 2:\n{duplicated_df.drop(columns=['config'])}")
+
+
 
             result_df = result_df.sort_values(by=default_loss_name)
 
