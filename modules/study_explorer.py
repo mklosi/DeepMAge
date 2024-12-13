@@ -53,6 +53,11 @@ if __name__ == '__main__':
         print(f"Study count: {len(study_names)}")
 
         for study_name in study_names:
+
+            # &&& param
+            if storage_url != f"sqlite:///{results_base_path}/studies.db" or study_name != "study-8":
+                continue
+
             print(f"--- study_name: {study_name} ------------------------")
             study = optuna.load_study(study_name=study_name, storage=storage_url)
             print_study_counts(study)
@@ -79,16 +84,13 @@ if __name__ == '__main__':
 
             ## Plot
 
-            # &&& param &&&
-            if storage_url == f"sqlite:///{results_base_path}/studies.db" and study_name == "study-7":
+            print("plot_param_importances...")
+            fig = plot_param_importances(study)
+            fig.show()
 
-                print("plot_param_importances...")
-                fig = plot_param_importances(study)
-                fig.show()
-
-                print("plot_slice...")
-                fig = plot_slice(study)
-                fig.show()
+            print("plot_slice...")
+            fig = plot_slice(study)
+            fig.show()
 
             ## result_df
 

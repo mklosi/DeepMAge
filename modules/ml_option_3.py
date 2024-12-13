@@ -366,11 +366,13 @@ class DeepMAgePredictor(DeepMAgeBase):
             )
 
             # Pruning
-            trial.report(val_loss, step_)
-            if trial.should_prune():
-                print(f"Trial '{trial.number}' pruned at step '{step_}'.")
-                raise exceptions.TrialPruned()
-            step_ += 1
+            # Only prune during the first fold.
+            if step_ is not None:
+                trial.report(val_loss, step_)
+                if trial.should_prune():
+                    print(f"Trial '{trial.number}' pruned at step '{step_}'.")
+                    raise exceptions.TrialPruned()
+                step_ += 1
 
             # Learning rate scheduler
             lr_scheduler.step(val_loss)
@@ -448,6 +450,10 @@ class DeepMAgePredictor(DeepMAgeBase):
             self.__init__(self.config)
             fold_result = self.train(train_data, val_data, trial)
             fold_metrics.append(fold_result)
+
+            # Set step_ to None after the first fold. used in 'train'.
+            global step_
+            step_ = None
 
         result_dict = {metric: np.mean([fold[metric] for fold in fold_metrics]) for metric in fold_metrics[0]}
 

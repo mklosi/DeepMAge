@@ -1,4 +1,5 @@
 import inspect
+from itertools import permutations
 import itertools
 import json
 import sys
@@ -48,7 +49,7 @@ results_base_path = "result_artifacts"
 
 # &&& param
 # study_name = get_config_id(search_space)[:16]  # Half of actual length.
-study_name = "study-7"
+study_name = "study-9"
 
 study_db_url = f"sqlite:///{results_base_path}/studies.db"
 lock_path = Path(f"{results_base_path}/result_df.lock")
@@ -59,6 +60,14 @@ config_id_str = "config_id"
 relevant_cols = ["config_id", "datetime_start", "duration", "medae", "mae", "mse", "study_name", "config"]
 
 
+def get_inner_layer_permutations(inner_layers):
+    # Generate all permutations of lengths 1 to len(nums)
+    all_permutations = [
+        json.dumps(list(p)) for r in range(1, len(inner_layers) + 1) for p in permutations(inner_layers, r)
+    ]
+    return all_permutations
+
+
 def get_config(trial):
 
     # TODO move these into arg module.
@@ -67,13 +76,13 @@ def get_config(trial):
 
     search_space = {  # big run
 
-        "batch_size": trial.suggest_categorical("batch_size", [8, 16, 32, 64, 128]),
+        "batch_size": trial.suggest_categorical("batch_size", [8]),
 
         "early_stop_patience": trial.suggest_int("early_stop_patience", 100, 100, step=50),
 
         "early_stop_threshold": round(trial.suggest_float("early_stop_threshold", 0.0001, 0.0001), 4),
 
-        "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["mean", "median"]),
+        "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["median"]),
 
         "k_folds": trial.suggest_int("k_folds", 5, 5),
 
@@ -87,23 +96,22 @@ def get_config(trial):
 
         "lr_threshold": round(trial.suggest_float("lr_threshold", 0.001, 0.001, step=0.01), 3),
 
-        "max_epochs": trial.suggest_int("max_epochs", 999, 999),
+        "max_epochs": trial.suggest_int("max_epochs", 9999, 9999),
 
         "model.activation_func": trial.suggest_categorical("model.activation_func", [
-            "elu", "leakyrelu", "relu",
+            "elu", #"leakyrelu", "relu",
             # "celu", "elu", "gelu", "leakyrelu", "relu", "silu",
         ]),
 
-        "model.dropout": round(trial.suggest_float("model.dropout", 0.0, 0.3, step=0.1), 3),
+        # Having `0.0, 0.0, step=0.001` will produce only `"model.dropout": 0.0,`.
+        "model.dropout": round(trial.suggest_float("model.dropout", 0.0, 0.0, step=0.001), 3),
 
-        "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
-            json.dumps([512, 512, 256, 128]),
-            json.dumps([256, 128, 64]),
-            json.dumps([128, 64]),
-            json.dumps([32]),
-            json.dumps([16]),
-            json.dumps([32, 16]),
-        ]),
+        # "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
+        #     json.dumps([4]),
+        # ]),
+        "model.inner_layers": trial.suggest_categorical("model.inner_layers", get_inner_layer_permutations(
+            [1, 2, 4, 8, 16, 32],
+        )),
 
         "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
 
@@ -114,13 +122,13 @@ def get_config(trial):
         "predictor_class": trial.suggest_categorical("predictor_class", ["DeepMAgePredictor"]),
 
         # The larger the number, the more number of samples will be imputed, instead of filtered out.
-        "remove_nan_samples_perc_2": trial.suggest_int("remove_nan_samples_perc_2", 0, 100, step=10),
+        "remove_nan_samples_perc_2": trial.suggest_int("remove_nan_samples_perc_2", 80, 80, step=10),
 
         "split_train_test_by_percent": trial.suggest_categorical("split_train_test_by_percent", [False]),
 
         "test_ratio": trial.suggest_float("test_ratio", 0.2, 0.2),
 
-        "weight_decay": round(trial.suggest_float("weight_decay", 0.0, 0.5, step=0.1), 1),
+        "weight_decay": round(trial.suggest_float("weight_decay", 0.000013, 0.000013, step=0.000001), 6),
 
     }
 
@@ -297,7 +305,7 @@ def main(override, restart):
     ## &&& param
 
     n_trials = 9999
-    # n_trials = 30
+    # n_trials = 5
 
     # n_startup_trials = n_trials  # This effectively disables pruning.
     n_startup_trials = 20
@@ -335,8 +343,34 @@ def main(override, restart):
     # TODO do these two functions need to be here inside now?
     def objective(trial):
 
-        set_seeds()  # Reset seeds for reproducibility
+        # &&& param
+        # config = {
+        #     "batch_size": 8,
+        #     "early_stop_patience": 100,
+        #     "early_stop_threshold": 0.0001,
+        #     "imputation_strategy": "median",
+        #     "k_folds": 5,
+        #     "loss_name": "medae",
+        #     "lr_factor": 0.1,
+        #     "lr_init": 0.001,
+        #     "lr_patience": 25,
+        #     "lr_threshold": 0.001,
+        #     "max_epochs": 999,
+        #     "model.activation_func": "elu",
+        #     "model.dropout": 0.0,
+        #     "model.inner_layers": "[32]",
+        #     "model.input_dim": 1000,
+        #     "model.model_class": "DeepMAgeModel",
+        #     "normalization_strategy": "per_site",
+        #     "predictor_class": "DeepMAgePredictor",
+        #     "remove_nan_samples_perc_2": 80,
+        #     "split_train_test_by_percent": False,
+        #     "test_ratio": 0.2,
+        #     "weight_decay": 0.000013
+        # }
         config = get_config(trial)
+
+        set_seeds()  # Reset seeds for reproducibility
         config_id = get_config_id(config)
 
         print(f"--- Train pipeline for config_id: {config_id} --------------------------------------------")
