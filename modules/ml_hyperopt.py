@@ -51,8 +51,8 @@ search_space = {
     "early_stop_threshold": hp.choice("early_stop_threshold", [0.0001]),
 
     "model": {
-        "inner_layers": hp.choice(
-            "inner_layers", [
+        "hidden_edges": hp.choice(
+            "hidden_edges", [
                 [512, 512, 256, 128],
             ]
         ),

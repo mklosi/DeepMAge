@@ -55,7 +55,7 @@ if __name__ == '__main__':
         for study_name in study_names:
 
             # &&& param
-            if storage_url != f"sqlite:///{results_base_path}/studies.db" or study_name != "study-8":
+            if storage_url != f"sqlite:///{results_base_path}/studies.db" or study_name != "study-10":
                 continue
 
             print(f"--- study_name: {study_name} ------------------------")

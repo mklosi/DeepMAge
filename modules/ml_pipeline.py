@@ -56,7 +56,7 @@ main_args_list = [
             #   128 inputs and gives 64 outputs. The final inner layer takes 64
             #   and gives 32. The last actual layer (final layer) would take
             #   in 32 and output 1 value, since we just want one final value.
-            "inner_layers": model__inner_layers,
+            "hidden_edges": model__hidden_edges,
 
             "dropout": model__dropout,
             "activation_func": model__activation_func,
@@ -98,7 +98,7 @@ main_args_list = [
     # # for model__layer4_in in [256]
     # # for model__layer5_in in [128]
     #
-    # for model__inner_layers in [[512, 512, 256, 128]]
+    # for model__hidden_edges in [[512, 512, 256, 128]]
     #
     # for model__dropout in [0.3]
     #
@@ -110,7 +110,7 @@ main_args_list = [
 
     # ------------------------------------------------------
 
-    for model__inner_layers in [
+    for model__hidden_edges in [
         [512, 512, 256, 128],
         [512, 512, 256, 256, 128, 64],
         [1024, 512, 256, 128, 64, 32, 16, 8],
@@ -150,7 +150,7 @@ main_args_list = [
 
     # ------------------------------------------------------
 
-    # for model__inner_layers in [
+    # for model__hidden_edges in [
     #     [512, 512, 512, 512, 512],
     # ]
     #
