@@ -4,36 +4,47 @@
 #     def __init__(self, config):
 #         super(DeepMAgeModel, self).__init__()
 #         self.config = config
-#         self.fc1 = nn.Linear(self.config["input_dim"], self.config["layer2_in"])
-#         self.fc2 = nn.Linear(self.config["layer2_in"], self.config["layer3_in"])
-#         self.fc3 = nn.Linear(self.config["layer3_in"], self.config["layer4_in"])
-#         self.fc4 = nn.Linear(self.config["layer4_in"], self.config["layer5_in"])
-#         self.fc5 = nn.Linear(self.config["layer5_in"], 1)
-#         self.dropout = nn.Dropout(self.config["dropout"])
+#
+#         hidden_edges = self.config["model.hidden_edges"]
+#         if isinstance(hidden_edges, str):
+#             hidden_edges = json.loads(hidden_edges)
+#
+#         # Dynamically create layers.
+#         self.fcs = nn.ModuleList()
+#         self.fcs.append(nn.Linear(self.config["model.input_dim"], hidden_edges[0]))
+#         previous_out = hidden_edges[0]
+#         for inner_layer in hidden_edges[1:]:
+#             self.fcs.append(nn.Linear(previous_out, inner_layer))
+#             previous_out = inner_layer
+#         self.fcs.append(nn.Linear(previous_out, 1))
+#
+#         self.dropout = nn.Dropout(self.config["model.dropout"])
 #         activation_funcs = {
+#             "celu": nn.CELU(),
 #             "elu": nn.ELU(),
+#             "gelu": nn.GELU(),
+#             "leakyrelu": nn.LeakyReLU(),
 #             "relu": nn.ReLU(),
+#             "silu": nn.SiLU(),
 #         }
-#         self.activation_func = activation_funcs[self.config["activation_func"]]
+#         self.activation_func = activation_funcs[self.config["model.activation_func"]]
 #
 #     def forward(self, x):
-#         x = self.activation_func(self.fc1(x))
-#         x = self.dropout(x)
-#         x = self.activation_func(self.fc2(x))
-#         x = self.dropout(x)
-#         x = self.activation_func(self.fc3(x))
-#         x = self.dropout(x)
-#         x = self.activation_func(self.fc4(x))
-#         x = self.dropout(x)
-#         x = self.fc5(x)
+#         for i, fc in enumerate(self.fcs[:-1]):
+#             x = self.activation_func(fc(x))
+#             # Add dropout only if not the final hidden layer
+#             if i < len(self.fcs[:-1]) - 1:
+#                 x = self.dropout(x)
+#         x = self.fcs[-1](x)
 #         return x
+
 # class DeepMAgeModel(nn.Module):
 #     """Deep neural network for age prediction with configurable inner layers."""
 #
 #     def __init__(self, config):
 #         super(DeepMAgeModel, self).__init__()
 #         self.config = config
-#         inner_layers = self.config["inner_layers"]
+#         hidden_edges = self.config["hidden_edges"]
 #         dropout = self.config["dropout"]
 #         activation_funcs = {
 #             "elu": nn.ELU(),
@@ -44,11 +55,11 @@
 #         # Create the layers dynamically
 #         layers = []
 #         input_dim = self.config["input_dim"]
-#         for i, layer_dim in enumerate(inner_layers):
+#         for i, layer_dim in enumerate(hidden_edges):
 #             layers.append(nn.Linear(input_dim, layer_dim))
 #             layers.append(activation_func)
 #             # Add dropout only if not the final hidden layer
-#             if i < len(inner_layers) - 1:
+#             if i < len(hidden_edges) - 1:
 #                 layers.append(nn.Dropout(dropout))
 #             input_dim = layer_dim
 #
