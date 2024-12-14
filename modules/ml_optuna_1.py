@@ -49,7 +49,7 @@ results_base_path = "result_artifacts"
 
 # &&& param
 # study_name = get_config_id(search_space)[:16]  # Half of actual length.
-study_name = "study-9"
+study_name = "study-10"
 
 study_db_url = f"sqlite:///{results_base_path}/studies.db"
 lock_path = Path(f"{results_base_path}/result_df.lock")
@@ -76,11 +76,11 @@ def get_config(trial):
 
     search_space = {  # big run
 
-        "batch_size": trial.suggest_categorical("batch_size", [8]),
+        "batch_size": trial.suggest_int("batch_size", 8, 64, step=8),
 
         "early_stop_patience": trial.suggest_int("early_stop_patience", 100, 100, step=50),
 
-        "early_stop_threshold": round(trial.suggest_float("early_stop_threshold", 0.0001, 0.0001), 4),
+        "early_stop_threshold": round(trial.suggest_float("early_stop_threshold", 0.00001, 0.00001), 5),
 
         "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["median"]),
 
@@ -106,12 +106,13 @@ def get_config(trial):
         # Having `0.0, 0.0, step=0.001` will produce only `"model.dropout": 0.0,`.
         "model.dropout": round(trial.suggest_float("model.dropout", 0.0, 0.0, step=0.001), 3),
 
-        # "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
-        #     json.dumps([4]),
-        # ]),
-        "model.inner_layers": trial.suggest_categorical("model.inner_layers", get_inner_layer_permutations(
-            [1, 2, 4, 8, 16, 32],
-        )),
+        "model.inner_layers": trial.suggest_categorical("model.inner_layers", [
+            json.dumps([32, 16, 1, 2, 8, 4]),
+            json.dumps([32, 16, 4, 8]),
+        ]),
+        # "model.inner_layers": trial.suggest_categorical("model.inner_layers", get_inner_layer_permutations(
+        #     [1, 2, 4, 8, 16, 32],
+        # )),
 
         "model.input_dim": trial.suggest_int("model.input_dim", 1000, 1000),
 
@@ -304,11 +305,11 @@ def main(override, restart):
 
     ## &&& param
 
-    n_trials = 9999
-    # n_trials = 5
+    # n_trials = 9999
+    n_trials = 32
 
-    # n_startup_trials = n_trials  # This effectively disables pruning.
-    n_startup_trials = 20
+    n_startup_trials = n_trials  # This effectively disables pruning.
+    # n_startup_trials = 20
 
     n_min_trials = n_startup_trials
 
@@ -444,14 +445,10 @@ def main(override, restart):
             cols = relevant_cols + sorted(set(result_df.columns) - set(relevant_cols))
             result_df = result_df[cols]
 
-
-            # &&& this is temporary
-            # check for duplications
-            duplicated_df = result_df[result_df.duplicated(subset=[config_id_str], keep=False)]
-            duplicated_df = duplicated_df.sort_values(by=[config_id_str])
-            print(f"AAA duplicated_df 1:\n{duplicated_df.drop(columns=['config'])}")
-
-
+            # # check for duplications
+            # duplicated_df = result_df[result_df.duplicated(subset=[config_id_str], keep=False)]
+            # duplicated_df = duplicated_df.sort_values(by=[config_id_str])
+            # print(f"AAA duplicated_df 1:\n{duplicated_df.drop(columns=['config'])}")
 
             # Deduplicate based on config_id and similar 'default_loss_name' values, but without modifying the original precision.
             default_loss_name_rounded = f'{default_loss_name}_rounded'
@@ -459,14 +456,10 @@ def main(override, restart):
             result_df = result_df.drop_duplicates(subset=[config_id_str, default_loss_name_rounded], keep="last", ignore_index=True)
             result_df = result_df.drop(columns=[default_loss_name_rounded])
 
-
-            # &&& this is temporary
-            # check for duplications
-            duplicated_df = result_df[result_df.duplicated(subset=[config_id_str], keep=False)]
-            duplicated_df = duplicated_df.sort_values(by=[config_id_str])
-            print(f"AAA duplicated_df 2:\n{duplicated_df.drop(columns=['config'])}")
-
-
+            # # check for duplications
+            # duplicated_df = result_df[result_df.duplicated(subset=[config_id_str], keep=False)]
+            # duplicated_df = duplicated_df.sort_values(by=[config_id_str])
+            # print(f"AAA duplicated_df 2:\n{duplicated_df.drop(columns=['config'])}")
 
             result_df = result_df.sort_values(by=default_loss_name)
 
@@ -518,4 +511,4 @@ if __name__ == "__main__":
     # overwrite - set result_df to study.trials_dataframe() on each save callback.
     #   TODO maybe get that back in, once we move to true multiprocessing.
     # restart - restart a study.
-    main(override=True, restart=False)
+    main(override=False, restart=False)
