@@ -44,12 +44,12 @@ time.tzset()
 default_loss_name = "medae"
 
 # &&& param
-# results_base_path = "result_artifacts"
-results_base_path = "result_artifacts_temp"
+results_base_path = "result_artifacts"
+# results_base_path = "result_artifacts_temp"
 
 # &&& param
 # study_name = get_config_id(search_space)[:16]  # Half of actual length.
-study_name = "study-14"
+study_name = "study-15"
 
 study_db_url = f"sqlite:///{results_base_path}/studies.db"
 lock_path = Path(f"{results_base_path}/result_df.lock")
@@ -306,7 +306,7 @@ def main(override, restart):
     ## &&& param
 
     n_trials = 20
-    # n_trials = 30
+    # n_trials = 40
 
     n_startup_trials = n_trials  # This effectively disables pruning.
     # n_startup_trials = 20
@@ -345,8 +345,9 @@ def main(override, restart):
     def objective(trial):
 
         # &&& param
+        config = get_config(trial)
         # config = {
-        #     "batch_size": 8,
+        #     "batch_size": 4,
         #     "early_stop_patience": 100,
         #     "early_stop_threshold": 0.0001,
         #     "imputation_strategy": "median",
@@ -356,10 +357,10 @@ def main(override, restart):
         #     "lr_init": 0.001,
         #     "lr_patience": 25,
         #     "lr_threshold": 0.001,
-        #     "max_epochs": 999,
+        #     "max_epochs": 4,
         #     "model.activation_func": "elu",
         #     "model.dropout": 0.0,
-        #     "model.hidden_edges": "[32]",
+        #     "model.hidden_edges": "[32, 16, 1, 2, 8, 4]",
         #     "model.input_dim": 1000,
         #     "model.model_class": "DeepMAgeModel",
         #     "normalization_strategy": "per_site",
@@ -367,9 +368,8 @@ def main(override, restart):
         #     "remove_nan_samples_perc_2": 80,
         #     "split_train_test_by_percent": False,
         #     "test_ratio": 0.2,
-        #     "weight_decay": 0.000013
+        #     "weight_decay": 1.3e-05
         # }
-        config = get_config(trial)
 
         set_seeds()  # Reset seeds for reproducibility
         config_id = get_config_id(config)
@@ -386,7 +386,11 @@ def main(override, restart):
             print(f"Found existing results.")
             results = result_df[result_df["config_id"] == config_id].to_dict(orient="records")
             if len(results) > 1:
-                print(f"WARNING: Duplicate rows with different '{default_loss_name}' values found for config_id: {config_id}")
+                # TODO Remove this check. we are already checking in callback.
+                print(
+                    f"WARNING: objective: "
+                    f"Duplicate rows with different '{default_loss_name}' values found for config_id: {config_id}"
+                )
                 for result in results:
                     print(f"\t{default_loss_name}: {result[default_loss_name]}")
                 result_dict = min(
@@ -398,12 +402,14 @@ def main(override, restart):
                 result_dict = results[0]
         else:
             print(f"Running a new training pipeline.")
+            dt_ = datetime.now()
             # print(f"config:\n{json.dumps(config, indent=4)}")
             predictor_class_name = config["predictor_class"]
             # noinspection PyTypeChecker
             predictor_class = globals()[predictor_class_name]
             predictor = predictor_class(config)
             result_dict = predictor.train_pipeline(trial)
+            print(f"Total runtime for config_id '{config_id}': {datetime.now() - dt_}")
 
         # Attach custom attributes
         trial.set_user_attr("config", json.dumps(config))
@@ -450,16 +456,17 @@ def main(override, restart):
             # duplicated_df = duplicated_df.sort_values(by=[config_id_str])
             # print(f"AAA duplicated_df 1:\n{duplicated_df.drop(columns=['config'])}")
 
-            # Deduplicate based on config_id and similar 'default_loss_name' values, but without modifying the original precision.
-            default_loss_name_rounded = f'{default_loss_name}_rounded'
-            result_df[default_loss_name_rounded] = result_df[default_loss_name].round(6)
-            result_df = result_df.drop_duplicates(subset=[config_id_str, default_loss_name_rounded], keep="last", ignore_index=True)
-            result_df = result_df.drop(columns=[default_loss_name_rounded])
+            # # Deduplicate based on config_id and similar 'default_loss_name' values, but without modifying the original precision.
+            # default_loss_name_rounded = f'{default_loss_name}_rounded'
+            # result_df[default_loss_name_rounded] = result_df[default_loss_name].round(6)
+            # result_df = result_df.drop_duplicates(subset=[config_id_str, default_loss_name_rounded], keep="last", ignore_index=True)
+            # result_df = result_df.drop(columns=[default_loss_name_rounded])
 
-            # # check for duplications
-            # duplicated_df = result_df[result_df.duplicated(subset=[config_id_str], keep=False)]
-            # duplicated_df = duplicated_df.sort_values(by=[config_id_str])
-            # print(f"AAA duplicated_df 2:\n{duplicated_df.drop(columns=['config'])}")
+            # check for duplications
+            duplicated_df = result_df[result_df.duplicated(subset=[config_id_str], keep=False)]
+            if len(duplicated_df) != 0:
+                duplicated_df = duplicated_df.sort_values(by=[config_id_str])
+                print(f"WARNING: save_study_callback: duplicated df:\n{duplicated_df.drop(columns=['config'])}")
 
             result_df = result_df.sort_values(by=default_loss_name)
 
@@ -511,4 +518,4 @@ if __name__ == "__main__":
     # overwrite - set result_df to study.trials_dataframe() on each save callback.
     #   TODO maybe get that back in, once we move to true multiprocessing.
     # restart - restart a study.
-    main(override=False, restart=False)
+    main(override=True, restart=False)

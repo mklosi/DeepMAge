@@ -346,8 +346,7 @@ class DeepMAgePredictor(DeepMAgeBase):
                 ages = batch["age"].to(self.device)
 
                 self.optimizer.zero_grad()
-                predictions = self.model(features).squeeze()
-
+                predictions = self.model(features).squeeze(-1)
                 train_loss_batch = self.criterions[self.config["loss_name"]](predictions, ages)
                 train_loss_batch.backward()
                 self.optimizer.step()
@@ -416,7 +415,7 @@ class DeepMAgePredictor(DeepMAgeBase):
             )
 
         # mem.log_memory(print, "train")
-        print(f"train runtime: {datetime.now() - train_dt}")
+        print(f"Train runtime: {datetime.now() - train_dt}")
 
         return result_dict
 
@@ -428,7 +427,7 @@ class DeepMAgePredictor(DeepMAgeBase):
     #         for batch in val_loader:
     #             features = batch["features"].to(self.device)
     #             ages = batch["age"].to(self.device)
-    #             predictions = self.model(features).squeeze()
+    #             predictions = self.model(features).squeeze() # TODO do we need -1 here
     #             loss = self.criterions[loss_name](predictions, ages)
     #             total_loss += loss.item()
     #     val_loss = total_loss / len(val_loader)
@@ -446,7 +445,7 @@ class DeepMAgePredictor(DeepMAgeBase):
             for batch in val_loader:
                 features = batch["features"].to(self.device)
                 ages = batch["age"].to(self.device)
-                all_predictions.append(self.model(features).squeeze().cpu())
+                all_predictions.append(self.model(features).squeeze(-1).cpu())
                 all_targets.append(ages.cpu())
 
         all_predictions = torch.cat(all_predictions, dim=0)
@@ -471,7 +470,7 @@ class DeepMAgePredictor(DeepMAgeBase):
     #
     #         all_features = torch.cat(all_features, dim=0)
     #         all_ages = torch.cat(all_ages, dim=0)
-    #         predictions = self.model(all_features).squeeze()
+    #         predictions = self.model(all_features).squeeze() TODO do we need -1 here
     #
     #     val_loss = self.criterions[loss_name](predictions, all_ages).item()
     #
@@ -530,7 +529,7 @@ class DeepMAgePredictor(DeepMAgeBase):
                 features = batch["features"].to(self.device)
                 ages = batch["age"].to(self.device)
 
-                predictions = self.model(features).squeeze()
+                predictions = self.model(features).squeeze() # TODO do we need -1 here
                 predictions_all.extend(predictions.cpu())
                 actual_ages_all.extend(ages.cpu())
 
@@ -567,7 +566,7 @@ class DeepMAgePredictor(DeepMAgeBase):
         with torch.no_grad():
             for batch in loader:
                 features = batch["features"].to(self.device)
-                batch_predictions = self.model(features).squeeze()
+                batch_predictions = self.model(features).squeeze() # TODO do we need -1 here
                 predictions.extend(batch_predictions.cpu().numpy())
 
         predictions_df = pd.DataFrame({
