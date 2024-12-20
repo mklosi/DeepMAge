@@ -44,8 +44,8 @@ time.tzset()
 default_loss_name = "medae"
 
 # &&& param
-results_base_path = "result_artifacts"
-# results_base_path = "result_artifacts_temp"
+# results_base_path = "result_artifacts"
+results_base_path = "result_artifacts_temp"
 
 # &&& param
 # study_name = get_config_id(search_space)[:16]  # Half of actual length.
