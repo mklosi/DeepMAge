@@ -335,7 +335,8 @@ class DeepMAgePredictor(DeepMAgeBase):
         for epoch in range(self.config["max_epochs"]):
             # print(f"--- Epoch '{epoch + 1}/{epochs}' --------------------")
             self.model.train()
-            train_loss = 0
+            all_predictions = []
+            all_targets = []
             for i, batch in enumerate(train_loader):
                 # print(f"Processing batch: {i+1}/{len(train_loader)}")
 
@@ -346,20 +347,26 @@ class DeepMAgePredictor(DeepMAgeBase):
 
                 self.optimizer.zero_grad()
                 predictions = self.model(features).squeeze()
-                loss = self.criterions[self.config["loss_name"]](predictions, ages)
-                loss.backward()
+
+                train_loss_batch = self.criterions[self.config["loss_name"]](predictions, ages)
+                train_loss_batch.backward()
                 self.optimizer.step()
-                train_loss += loss.item()
+
+                all_predictions.append(predictions.detach().cpu())
+                all_targets.append(ages.detach().cpu())
 
             global step_
 
+            all_predictions = torch.cat(all_predictions, dim=0)
+            all_targets = torch.cat(all_targets, dim=0)
+            train_loss = self.criterions[self.config["loss_name"]](all_predictions, all_targets).item()
             val_loss = self.validate(val_loader, self.config["loss_name"])
             print(
                 f"config_id '{self.config_id}', "
                 f"Epoch '{epoch+1}/{self.config['max_epochs']}', "
                 f"Step '{step_}', "
                 f"lr: '{round(lr_scheduler.get_last_lr()[0], 10)}', "
-                f"Train Loss: {train_loss / len(train_loader):,.6f}, "
+                f"Train Loss: {train_loss:,.6f}, "
                 f"Val Loss: {val_loss:,.6f}"
             )
 
@@ -385,6 +392,7 @@ class DeepMAgePredictor(DeepMAgeBase):
                     "optimizer_state_dict": deepcopy(self.optimizer.state_dict()),
                     "predictor_state": deepcopy(self),
                 }
+                # TODO also restore "scheduler_state_dict": deepcopy(lr_scheduler.state_dict()),
             else:
                 patience_counter += 1
             if patience_counter >= self.config["early_stop_patience"]:
@@ -412,18 +420,63 @@ class DeepMAgePredictor(DeepMAgeBase):
 
         return result_dict
 
+    # TODO delete me. this is buggy implementation.
+    # def validate(self, val_loader, loss_name):
+    #     self.model.eval()
+    #     total_loss = 0
+    #     with torch.no_grad():
+    #         for batch in val_loader:
+    #             features = batch["features"].to(self.device)
+    #             ages = batch["age"].to(self.device)
+    #             predictions = self.model(features).squeeze()
+    #             loss = self.criterions[loss_name](predictions, ages)
+    #             total_loss += loss.item()
+    #     val_loss = total_loss / len(val_loader)
+    #     return val_loss
+
+    # Use Implementation 1 for large datasets or when memory is limited.
+    # Use Implementation 2 for smaller datasets or when validation speed is a priority.
+
+    # Implementation 1
     def validate(self, val_loader, loss_name):
         self.model.eval()
-        total_loss = 0
+        all_predictions = []
+        all_targets = []
         with torch.no_grad():
             for batch in val_loader:
                 features = batch["features"].to(self.device)
                 ages = batch["age"].to(self.device)
-                predictions = self.model(features).squeeze()
-                loss = self.criterions[loss_name](predictions, ages)
-                total_loss += loss.item()
-        val_loss = total_loss / len(val_loader)
-        return val_loss
+                all_predictions.append(self.model(features).squeeze().cpu())
+                all_targets.append(ages.cpu())
+
+        all_predictions = torch.cat(all_predictions, dim=0)
+        all_targets = torch.cat(all_targets, dim=0)
+        val_loss = self.criterions[loss_name](all_predictions, all_targets)
+
+        return val_loss.item()
+
+    # ## Implementation 2
+    # def validate(self, val_loader, loss_name):
+    #     self.model.eval()
+    #
+    #     all_features = []
+    #     all_ages = []
+    #
+    #     with torch.no_grad():
+    #         for batch in val_loader:
+    #             features = batch["features"].to(self.device)
+    #             ages = batch["age"].to(self.device)
+    #             all_features.append(features)
+    #             all_ages.append(ages)
+    #
+    #         all_features = torch.cat(all_features, dim=0)
+    #         all_ages = torch.cat(all_ages, dim=0)
+    #         predictions = self.model(all_features).squeeze()
+    #
+    #     val_loss = self.criterions[loss_name](predictions, all_ages).item()
+    #
+    #     return val_loss
+
 
     def cross_train(self, train_df, trial):
         """
