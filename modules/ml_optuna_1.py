@@ -49,7 +49,7 @@ results_base_path = "result_artifacts"
 
 # &&& param
 # study_name = get_config_id(search_space)[:16]  # Half of actual length.
-study_name = "study-17"
+study_name = "study-19"
 
 study_db_url = f"sqlite:///{results_base_path}/studies.db"
 lock_path = Path(f"{results_base_path}/result_df.lock")
@@ -518,4 +518,4 @@ if __name__ == "__main__":
     # overwrite - set result_df to study.trials_dataframe() on each save callback.
     #   TODO maybe get that back in, once we move to true multiprocessing.
     # restart - restart a study.
-    main(override=True, restart=False)
+    main(override=False, restart=False)
