@@ -49,7 +49,7 @@ results_base_path = "result_artifacts"
 
 # &&& param
 # study_name = get_config_id(search_space)[:16]  # Half of actual length.
-study_name = "study-19"
+study_name = "study-20"
 
 study_db_url = f"sqlite:///{results_base_path}/studies.db"
 lock_path = Path(f"{results_base_path}/result_df.lock")
@@ -76,12 +76,12 @@ def get_config(trial):
 
     search_space = {  # big run
 
-        "batch_size": trial.suggest_int("batch_size", 4, 8, step=2),
+        "batch_size": trial.suggest_int("batch_size", 1, 4, step=1),
 
         "early_stop_patience": trial.suggest_int("early_stop_patience", 100, 100, step=50),
 
-        # "early_stop_threshold": round(trial.suggest_float("early_stop_threshold", 0.00001, 0.00001), 5),
-        "early_stop_threshold": trial.suggest_categorical("early_stop_threshold", [0.00001, 0.0001]),
+        "early_stop_threshold": round(trial.suggest_float("early_stop_threshold", 0.00001, 0.00001), 5),
+        # "early_stop_threshold": trial.suggest_categorical("early_stop_threshold", [0.0001, 0.0001]),
 
         "imputation_strategy": trial.suggest_categorical("imputation_strategy", ["median"]),
 
@@ -108,7 +108,7 @@ def get_config(trial):
         "model.dropout": round(trial.suggest_float("model.dropout", 0.0, 0.0, step=0.01), 2),
 
         "model.hidden_edges": trial.suggest_categorical("model.hidden_edges", [
-            json.dumps([32, 16, 1, 2, 8, 4]),
+            # json.dumps([32, 16, 1, 2, 8, 4]),
             json.dumps([32, 16, 4, 8]),
             json.dumps([32]),
         ]),
